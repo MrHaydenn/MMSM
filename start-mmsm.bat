@@ -24,7 +24,7 @@ if exist "%~dp0package.json" (
     goto FOUND_PACKAGE
 )
 if exist "%~dp0MMSM-main\package.json" (
-    set "APP_DIR=%~dp0MMSM-main"
+    set "APP_DIR=%~dp0MMSM-main\"
     cd /d "%~dp0MMSM-main"
     echo [+] Found project files inside nested MMSM-main folder.
     goto FOUND_PACKAGE
@@ -102,13 +102,17 @@ for /f "tokens=*" %%v in ('node -v 2^>nul') do echo     Node Version: %%v
 for /f "tokens=*" %%v in ('npm -v 2^>nul') do echo     NPM Version:  %%v
 echo.
 
-:: 4. Check & Install Dependencies
+:: 4. Check & Install Dependencies (using --legacy-peer-deps for modern Node/NPM compatibility)
 echo [3/4] Verifying node_modules dependencies...
 if not exist "%APP_DIR%node_modules" (
     echo [MMSM] Dependencies not found. Installing node_modules (first run setup)...
-    echo        Please wait while npm installs packages...
+    echo        Resolving packages with peer dependency protection...
     echo.
-    call npm install
+    call npm install --legacy-peer-deps
+    if errorlevel 1 (
+        echo [!] Retrying installation with fallback flags...
+        call npm install --force
+    )
     if errorlevel 1 (
         color 0C
         echo.

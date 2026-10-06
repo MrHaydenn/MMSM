@@ -66,7 +66,11 @@ if (-not $nodeFound) {
 
 if (-not (Test-Path -Path "node_modules")) {
     Write-Host "[2/3] Installing dependencies for first-time launch..." -ForegroundColor Cyan
-    npm install
+    npm install --legacy-peer-deps
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[!] Retrying with --force fallback..." -ForegroundColor Yellow
+        npm install --force
+    }
 } else {
     Write-Host "[2/3] Dependencies found (node_modules present)." -ForegroundColor Cyan
 }

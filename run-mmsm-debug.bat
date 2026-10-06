@@ -13,10 +13,13 @@ echo Checking files in current directory:
 dir /b package.json 2>nul
 if %errorlevel% neq 0 (
     echo [!] package.json is NOT in %cd%
-    echo Let's search subdirectories:
-    dir /b /s package.json 2>nul
+    echo Searching subdirectories:
+    if exist "%~dp0MMSM-main\package.json" (
+        echo [+] Found in MMSM-main subfolder! Switching directory...
+        cd /d "%~dp0MMSM-main"
+    )
 ) else (
-    echo [+] package.json found!
+    echo [+] package.json found in current directory!
 )
 
 echo.
@@ -35,6 +38,19 @@ echo Running node -v:
 node -v
 echo Running npm -v:
 npm -v
+
+echo.
+echo Verifying node_modules:
+if not exist "node_modules" (
+    echo [!] node_modules missing. Running npm install --legacy-peer-deps ...
+    call npm install --legacy-peer-deps
+    if errorlevel 1 (
+        echo [!] Retrying with --force ...
+        call npm install --force
+    )
+) else (
+    echo [+] node_modules folder is present.
+)
 
 echo.
 echo Starting MMSM with npm run dev:

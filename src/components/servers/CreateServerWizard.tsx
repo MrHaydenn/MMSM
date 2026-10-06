@@ -104,9 +104,12 @@ export const CreateServerWizard: React.FC<CreateServerWizardProps> = ({
       });
   }, [loader, minecraftVersion]);
 
-  // Port assignment based on port range in wrapperSettings
+  const prevOpenRef = React.useRef(false);
+
+  // Initialize wizard state ONLY when the modal transitions from closed to open
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevOpenRef.current) {
+      setStep(1);
       const rangeStart = wrapperSettings?.portRangeStart || 25560;
       const rangeEnd = wrapperSettings?.portRangeEnd || 25569;
       const takenPorts = servers.map((s) => s.port);
@@ -123,8 +126,8 @@ export const CreateServerWizard: React.FC<CreateServerWizardProps> = ({
         setPort(freePort);
         setPortWarning(null);
       } else {
-        setPort('');
-        setPortWarning(`No available ports left in configured range (${rangeStart} - ${rangeEnd}). Please enter a port manually.`);
+        setPort(25565);
+        setPortWarning(`No available ports in configured range (${rangeStart} - ${rangeEnd}). Defaulting to 25565.`);
       }
 
       setMinRamGb(wrapperSettings?.defaultMinRamGb || 2);
@@ -136,11 +139,15 @@ export const CreateServerWizard: React.FC<CreateServerWizardProps> = ({
         setContentType('modpack');
         setSelectedModpack(initialModpack);
       } else {
-        setName('New Survival Server');
-        setDescription(`${loader.toUpperCase()} ${minecraftVersion} instance managed by MMSM.`);
+        setName('');
+        setDescription('');
+        setContentType('none');
+        setSelectedModpack(null);
+        setSelectedMods([]);
       }
     }
-  }, [isOpen, initialModpack, servers, wrapperSettings]);
+    prevOpenRef.current = isOpen;
+  }, [isOpen]);
 
   useEffect(() => {
     const latest = getLatestLoaderVersion(loader, minecraftVersion);

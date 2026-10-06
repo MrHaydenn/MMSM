@@ -287,6 +287,15 @@ export interface GitHubUpdateInfo {
   lastCheckedAt?: string;
 }
 
+export type AccentThemeColor = 'emerald' | 'blue' | 'purple' | 'red' | 'amber' | 'cyan' | 'rose' | 'zinc';
+export type EmblemIconPreset = 'sword' | 'pickaxe' | 'ender_eye' | 'server_rack' | 'golden_apple' | 'shield' | 'cube' | 'custom';
+
+export interface HostHardwareSpecs {
+  totalRamGb: number;
+  cpuCores: number;
+  totalDiskGb: number;
+}
+
 export interface WrapperSettings {
   autoAcceptEula: boolean;
   publicIp?: string;
@@ -295,6 +304,9 @@ export interface WrapperSettings {
   enableHttps: boolean;
   httpsPort?: number;
   customWrapperLogoUrl?: string;
+  accentColor?: AccentThemeColor;
+  customEmblemIcon?: EmblemIconPreset;
+  hostHardware?: HostHardwareSpecs;
   serversDirectory?: string;
   backupsDirectory?: string;
   defaultMinRamGb: number;

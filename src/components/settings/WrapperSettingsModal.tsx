@@ -30,15 +30,23 @@ import {
   Play,
   Square,
   HelpCircle,
+  Palette,
+  HardDrive,
+  Eraser,
+  Sword,
+  Pickaxe,
+  Eye,
+  Box,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
-import { MinecraftServer } from '../../types/server';
+import { MinecraftServer, AccentThemeColor, EmblemIconPreset } from '../../types/server';
+import { MmsmLogo } from '../common/MmsmLogo';
 
 interface WrapperSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'general' | 'networking' | 'updater' | 'launcher' | 'vault';
+  initialTab?: 'general' | 'appearance' | 'hardware' | 'networking' | 'updater' | 'launcher' | 'vault';
 }
 
 export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
@@ -50,6 +58,7 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
     servers,
     unarchiveServer,
     deleteServer,
+    purgeSampleData,
     wrapperSettings,
     updateWrapperSettings,
     checkForGitHubUpdate,
@@ -59,11 +68,12 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
   } = useServer();
   const { canPerformAction } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'general' | 'networking' | 'updater' | 'launcher' | 'vault'>(
+  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'hardware' | 'networking' | 'updater' | 'launcher' | 'vault'>(
     initialTab
   );
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [deleteConfirmServer, setDeleteConfirmServer] = useState<MinecraftServer | null>(null);
+  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
   const [copiedBatch, setCopiedBatch] = useState(false);
   const [copiedPs1, setCopiedPs1] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -97,177 +107,62 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
 
   // Windows 11 / 10 Batch script
   const batchScriptContent = `@echo off
-setlocal enabledelayedexpansion
-title MMSM - Minecraft Server Manager Wrapper
+title MMSM - Minecraft Server Manager Launcher
 color 0A
-cls
-
-:: Anchor execution directory to the script's exact folder
 cd /d "%~dp0"
 
 echo ======================================================================
-echo   MMSM - MrHaydenn's Minecraft Server Manager Wrapper
+echo    MMSM - MrHaydenn's Minecraft Server Manager Wrapper
+echo                  Windows 11 Startup Launcher
 echo ======================================================================
 echo.
-echo Current Directory: %~dp0
-echo.
 
-:: 1. CHECK IF PROJECT FILES EXIST IN THIS FOLDER
 if not exist "%~dp0package.json" (
-    color 0C
-    echo ======================================================================
-    echo [ERROR] Project files not found in this folder!
-    echo ======================================================================
-    echo.
-    echo It looks like you ran start-mmsm.bat from:
-    echo   "%~dp0"
-    echo.
-    echo But "package.json" was not found here.
-    echo.
-    echo SOLUTION:
-    echo 1. Extract / copy all MMSM project files into a folder.
-    echo 2. Place this "start-mmsm.bat" file inside that same folder (next to package.json).
-    echo 3. Double-click start-mmsm.bat again.
-    echo.
-    echo ======================================================================
-    pause
-    exit /b 1
-)
-
-:: 2. DETECT NODE.JS & CHECK COMMON INSTALL PATHS
-set "NODE_CMD="
-
-where node >nul 2>nul
-if %errorlevel% equ 0 (
-    set "NODE_CMD=node"
-) else (
-    if exist "%ProgramFiles%\\nodejs\\node.exe" (
-        set "PATH=%ProgramFiles%\\nodejs;%PATH%"
-        set "NODE_CMD=%ProgramFiles%\\nodejs\\node.exe"
-    ) else if exist "%ProgramFiles(x86)%\\nodejs\\node.exe" (
-        set "PATH=%ProgramFiles(x86)%\\nodejs;%PATH%"
-        set "NODE_CMD=%ProgramFiles(x86)%\\nodejs\\node.exe"
-    ) else if exist "%LOCALAPPDATA%\\Programs\\nodejs\\node.exe" (
-        set "PATH=%LOCALAPPDATA%\\Programs\\nodejs;%PATH%"
-        set "NODE_CMD=%LOCALAPPDATA%\\Programs\\nodejs\\node.exe"
-    )
-)
-
-if "%NODE_CMD%"=="" (
-    color 0C
-    echo ======================================================================
-    echo [ERROR] Node.js is NOT installed or not recognized!
-    echo ======================================================================
-    echo.
-    echo MMSM requires Node.js (v18 or newer) to run the management wrapper.
-    echo.
-    echo Steps to resolve:
-    echo 1. Go to https://nodejs.org/ and download the "LTS" installer.
-    echo 2. Run the installer and ensure "Add to PATH" is checked.
-    echo 3. Restart your computer or restart this terminal window.
-    echo.
-    echo ======================================================================
-    pause
-    exit /b 1
-)
-
-for /f "tokens=*" %%i in ('node -v 2^>nul') do set "NODE_VERSION=%%i"
-for /f "tokens=*" %%i in ('npm -v 2^>nul') do set "NPM_VERSION=%%i"
-
-echo [+] Node.js detected: %NODE_VERSION%
-echo [+] NPM detected:     %NPM_VERSION%
-echo.
-
-:: 3. INSTALL DEPENDENCIES IF NEEDED
-if not exist "%~dp0node_modules\\" (
-    echo [MMSM] First-time setup: Installing required dependencies...
-    echo Please wait, this may take 30-60 seconds...
-    echo.
-    call npm install
-    if !errorlevel! neq 0 (
+    if exist "%~dp0MMSM-main\\package.json" (
+        cd /d "%~dp0MMSM-main"
+    ) else if exist "%~dp0..\\package.json" (
+        cd /d "%~dp0..\\"
+    ) else (
         color 0C
-        echo.
-        echo [ERROR] Dependency installation failed! Please check above output.
+        echo [ERROR] package.json not found! Please extract all files.
         pause
         exit /b 1
     )
-    echo.
-    echo [+] Dependencies installed successfully!
-    echo.
-) else (
-    echo [+] Dependencies verified (node_modules present).
 )
 
-:: 4. START DEV SERVER & BROWSER
-echo ======================================================================
-echo   Starting MMSM WebGUI Dashboard on http://localhost:3000
-echo ======================================================================
-echo.
-echo Launching default browser in 2 seconds...
+if not exist "node_modules" (
+    echo [MMSM] Installing dependencies for first-time launch...
+    call npm install --legacy-peer-deps
+    if errorlevel 1 call npm install --force
+)
+
 start "" cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:3000"
-
-echo Running MMSM server... (Press Ctrl+C to stop)
-echo.
-
 call npm run dev
-
-if %errorlevel% neq 0 (
-    color 0C
-    echo.
-    echo ======================================================================
-    echo [NOTICE] Server process exited with code %errorlevel%.
-    echo ======================================================================
-)
-
-echo.
-echo Press any key to exit...
-pause >nul
+pause
 `;
 
   // PowerShell Runner
   const ps1ScriptContent = `# MMSM - MrHaydenn's Minecraft Server Manager PowerShell Launcher
-$Host.UI.RawUI.WindowTitle = "MMSM - Minecraft Server Manager Wrapper"
+$ErrorActionPreference = "Continue"
 Set-Location -Path $PSScriptRoot
 
-Write-Host "======================================================================" -ForegroundColor Green
-Write-Host "  MMSM - MrHaydenn's Minecraft Server Manager Wrapper" -ForegroundColor Green
-Write-Host "======================================================================" -ForegroundColor Green
-Write-Host ""
-
-Write-Host "[1/3] Checking Node.js runtime..." -ForegroundColor Cyan
-try {
-    $nodeVer = & node -v
-    $npmVer = & npm -v
-    Write-Host "[+] Node.js version: $nodeVer" -ForegroundColor Green
-    Write-Host "[+] NPM version:     $npmVer" -ForegroundColor Green
-} catch {
-    Write-Host ""
-    Write-Host "[ERROR] Node.js is not installed or not in PATH!" -ForegroundColor Red
-    Write-Host "Please download Node.js (LTS) from https://nodejs.org/" -ForegroundColor Yellow
-    Write-Host ""
-    Read-Host "Press Enter to exit"
-    exit 1
+if (-not (Test-Path "package.json")) {
+    if (Test-Path "MMSM-main\\package.json") {
+        Set-Location -Path "MMSM-main"
+    } elseif (Test-Path "..\\package.json") {
+        Set-Location -Path ".."
+    }
 }
 
-if (-not (Test-Path -Path "node_modules")) {
-    Write-Host "[2/3] Installing dependencies for first-time launch..." -ForegroundColor Cyan
-    npm install
-} else {
-    Write-Host "[2/3] Dependencies found." -ForegroundColor Cyan
+if (-not (Test-Path "node_modules")) {
+    Write-Host "[MMSM] Installing dependencies..." -ForegroundColor Cyan
+    npm install --legacy-peer-deps
+    if ($LASTEXITCODE -ne 0) { npm install --force }
 }
-
-Write-Host "[3/3] Starting MMSM WebGUI on http://localhost:3000 ..." -ForegroundColor Cyan
-Write-Host ""
-Write-Host "======================================================================" -ForegroundColor Green
-Write-Host "  MMSM is active! Open http://localhost:3000 in your browser." -ForegroundColor Green
-Write-Host "  Press Ctrl+C in this PowerShell window to stop the server." -ForegroundColor Green
-Write-Host "======================================================================" -ForegroundColor Green
-Write-Host ""
 
 Start-Process "http://localhost:3000"
 npm run dev
-
-Read-Host "MMSM process ended. Press Enter to close"
+Read-Host "MMSM stopped. Press Enter to close"
 `;
 
   const handleDownloadLauncher = () => {
@@ -302,23 +197,44 @@ Read-Host "MMSM process ended. Press Enter to close"
     setTimeout(() => setCopiedPs1(false), 2500);
   };
 
+  const accentColors: { id: AccentThemeColor; name: string; bg: string; border: string }[] = [
+    { id: 'emerald', name: 'Emerald Green (Default)', bg: 'bg-emerald-500', border: 'border-emerald-500' },
+    { id: 'blue', name: 'Cyber Sapphire', bg: 'bg-blue-500', border: 'border-blue-500' },
+    { id: 'purple', name: 'Amethyst Purple', bg: 'bg-purple-500', border: 'border-purple-500' },
+    { id: 'red', name: 'Crimson Ruby', bg: 'bg-rose-500', border: 'border-rose-500' },
+    { id: 'amber', name: 'Golden Amber', bg: 'bg-amber-500', border: 'border-amber-500' },
+    { id: 'cyan', name: 'Neon Cyan', bg: 'bg-cyan-500', border: 'border-cyan-500' },
+    { id: 'rose', name: 'Rose Quartz', bg: 'bg-pink-500', border: 'border-pink-500' },
+    { id: 'zinc', name: 'Obsidian Slate', bg: 'bg-zinc-400', border: 'border-zinc-400' },
+  ];
+
+  const emblemPresets: { id: EmblemIconPreset; name: string; icon: React.ReactNode }[] = [
+    { id: 'sword', name: 'Netherite Sword', icon: <Sword className="w-4 h-4 text-emerald-400" /> },
+    { id: 'pickaxe', name: 'Diamond Pickaxe', icon: <Pickaxe className="w-4 h-4 text-cyan-400" /> },
+    { id: 'ender_eye', name: 'Ender Eye', icon: <Eye className="w-4 h-4 text-purple-400" /> },
+    { id: 'server_rack', name: 'Server Rack', icon: <Server className="w-4 h-4 text-blue-400" /> },
+    { id: 'golden_apple', name: 'Golden Apple', icon: <Sparkles className="w-4 h-4 text-amber-400" /> },
+    { id: 'shield', name: 'Battle Shield', icon: <Shield className="w-4 h-4 text-rose-400" /> },
+    { id: 'cube', name: 'Minecraft Block', icon: <Box className="w-4 h-4 text-emerald-400" /> },
+  ];
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
-      <div className="bg-[#11151c] border border-zinc-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col overflow-hidden max-h-[88vh]">
-        {/* Modal Header */}
-        <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+      <div className="bg-[#11151c] border border-zinc-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+        {/* Header */}
+        <div className="p-5 border-b border-zinc-800 flex items-center justify-between bg-[#151922]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
               <Settings className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-bold text-zinc-100 flex items-center gap-2">
                 <span>MMSM Wrapper Settings</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
-                  {wrapperSettings.githubUpdate.currentVersion}
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-semibold">
+                  Host Level
                 </span>
               </h2>
-              <p className="text-xs text-zinc-400">Global launcher preferences, network bindings, updates & vaults</p>
+              <p className="text-xs text-zinc-400">Branding, machine hardware specs, networking, launchers & data management</p>
             </div>
           </div>
 
@@ -345,6 +261,30 @@ Read-Host "MMSM process ended. Press Enter to close"
           </button>
 
           <button
+            onClick={() => setActiveTab('appearance')}
+            className={`px-3.5 py-2 border-b-2 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
+              activeTab === 'appearance'
+                ? 'border-emerald-500 text-emerald-400'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Palette className="w-3.5 h-3.5" />
+            <span>Appearance & Emblem</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('hardware')}
+            className={`px-3.5 py-2 border-b-2 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
+              activeTab === 'hardware'
+                ? 'border-emerald-500 text-emerald-400'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <HardDrive className="w-3.5 h-3.5" />
+            <span>Hardware & Clean Slate</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('networking')}
             className={`px-3.5 py-2 border-b-2 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
               activeTab === 'networking'
@@ -365,10 +305,7 @@ Read-Host "MMSM process ended. Press Enter to close"
             }`}
           >
             <GitBranch className="w-3.5 h-3.5" />
-            <span>GitHub Auto-Updater</span>
-            {wrapperSettings.githubUpdate.hasUpdate && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            )}
+            <span>Auto-Updater</span>
           </button>
 
           <button
@@ -380,7 +317,7 @@ Read-Host "MMSM process ended. Press Enter to close"
             }`}
           >
             <Terminal className="w-3.5 h-3.5" />
-            <span>Standalone Launchers (.bat / .exe)</span>
+            <span>Windows 11 Launcher (.bat)</span>
           </button>
 
           <button
@@ -392,7 +329,7 @@ Read-Host "MMSM process ended. Press Enter to close"
             }`}
           >
             <Archive className="w-3.5 h-3.5" />
-            <span>Archived Servers ({archivedServers.length})</span>
+            <span>Vault ({archivedServers.length})</span>
           </button>
         </div>
 
@@ -401,14 +338,13 @@ Read-Host "MMSM process ended. Press Enter to close"
           {saveSuccess && (
             <div className="p-3.5 bg-emerald-950/60 border border-emerald-800 text-xs text-emerald-300 rounded-xl flex items-center gap-2.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Wrapper settings saved successfully!</span>
+              <span>Wrapper preferences saved successfully!</span>
             </div>
           )}
 
           {/* TAB 1: GENERAL */}
           {activeTab === 'general' && (
             <form onSubmit={handleSave} className="space-y-6">
-              {/* Directory Paths Configuration */}
               <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-4">
                 <div className="flex items-center gap-2">
                   <Folder className="w-4 h-4 text-emerald-400" />
@@ -421,7 +357,7 @@ Read-Host "MMSM process ended. Press Enter to close"
                   <div className="space-y-1">
                     <label className="text-zinc-300 font-medium flex items-center justify-between">
                       <span>Default Servers Directory</span>
-                      <span className="text-[10px] text-zinc-500 font-mono">Each server created in its own folder</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">Folder where server files reside</span>
                     </label>
                     <input
                       type="text"
@@ -507,10 +443,238 @@ Read-Host "MMSM process ended. Press Enter to close"
             </form>
           )}
 
-          {/* TAB 2: NETWORKING & WEBGUI PORT */}
+          {/* TAB 2: APPEARANCE & EMBLEM */}
+          {activeTab === 'appearance' && (
+            <div className="space-y-6">
+              {/* Live Preview Bar */}
+              <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <MmsmLogo size={44} />
+                  <div>
+                    <span className="text-xs text-zinc-400 block font-mono">Emblem & Accent Live Preview</span>
+                    <span className="text-base font-bold font-mono text-zinc-100">
+                      MMSM <span className="text-xs uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-normal">Theme Active</span>
+                    </span>
+                  </div>
+                </div>
+                <span className="text-xs text-zinc-400 font-mono hidden sm:block">
+                  Accent: <strong className="capitalize text-zinc-200">{wrapperSettings.accentColor || 'emerald'}</strong>
+                </span>
+              </div>
+
+              {/* Accent Color Picker */}
+              <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-3">
+                <label className="text-xs font-bold text-zinc-200 uppercase tracking-wide flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-emerald-400" />
+                  <span>Wrapper Accent Color Theme</span>
+                </label>
+                <p className="text-xs text-zinc-400">
+                  Select the primary accent color applied to header emblems, badges, buttons, and dashboard highlights.
+                </p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                  {accentColors.map((c) => {
+                    const isSelected = (wrapperSettings.accentColor || 'emerald') === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => updateWrapperSettings({ accentColor: c.id })}
+                        className={`p-3 rounded-xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-zinc-800 border-zinc-300 shadow-lg'
+                            : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <span className={`w-4 h-4 rounded-full ${c.bg} shrink-0 shadow`} />
+                        <span className="text-xs font-semibold text-zinc-200 truncate">{c.name.split(' ')[0]}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-zinc-100 ml-auto shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Top-Left Corner Emblem Selector */}
+              <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-3">
+                <label className="text-xs font-bold text-zinc-200 uppercase tracking-wide flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span>Top-Left Corner Emblem Icon</span>
+                </label>
+                <p className="text-xs text-zinc-400">
+                  Choose a preset Minecraft or server emblem, or paste a custom image URL below.
+                </p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2">
+                  {emblemPresets.map((emb) => {
+                    const isSelected = (wrapperSettings.customEmblemIcon || 'sword') === emb.id;
+                    return (
+                      <button
+                        key={emb.id}
+                        type="button"
+                        onClick={() => updateWrapperSettings({ customEmblemIcon: emb.id, customWrapperLogoUrl: '' })}
+                        className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                          isSelected && !wrapperSettings.customWrapperLogoUrl
+                            ? 'bg-zinc-800 border-emerald-500 shadow-md text-zinc-100'
+                            : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                        }`}
+                      >
+                        {emb.icon}
+                        <span className="text-xs font-semibold truncate">{emb.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Custom Logo URL Override */}
+                <div className="pt-3 border-t border-zinc-800 space-y-1.5 text-xs">
+                  <label className="text-zinc-300 font-semibold flex items-center justify-between">
+                    <span>Custom Logo / Image URL</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">Optional</span>
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://example.com/my-custom-logo.png"
+                    value={wrapperSettings.customWrapperLogoUrl || ''}
+                    onChange={(e) => updateWrapperSettings({ customWrapperLogoUrl: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 font-mono text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                  {wrapperSettings.customWrapperLogoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => updateWrapperSettings({ customWrapperLogoUrl: '' })}
+                      className="text-[11px] text-rose-400 hover:underline cursor-pointer"
+                    >
+                      Clear custom image and revert to preset emblem
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: HARDWARE & CLEAN SLATE */}
+          {activeTab === 'hardware' && (
+            <div className="space-y-6">
+              {/* Host Machine Hardware Specs */}
+              <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <HardDrive className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
+                      Host Machine Hardware Specifications
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const detectedRam = (typeof navigator !== 'undefined' && (navigator as any).deviceMemory) ? (navigator as any).deviceMemory : 16;
+                      const detectedCpu = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : 8;
+                      updateWrapperSettings({
+                        hostHardware: {
+                          totalRamGb: detectedRam,
+                          cpuCores: detectedCpu,
+                          totalDiskGb: wrapperSettings.hostHardware?.totalDiskGb || 500,
+                        },
+                      });
+                    }}
+                    className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] rounded-lg border border-zinc-700 cursor-pointer"
+                  >
+                    Auto-Detect System
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-mono">
+                  <div className="space-y-1.5">
+                    <label className="text-zinc-400 font-sans">Total Physical RAM (GB)</label>
+                    <input
+                      type="number"
+                      min="4"
+                      max="512"
+                      value={wrapperSettings.hostHardware?.totalRamGb || 16}
+                      onChange={(e) =>
+                        updateWrapperSettings({
+                          hostHardware: {
+                            ...(wrapperSettings.hostHardware || { cpuCores: 8, totalDiskGb: 500 }),
+                            totalRamGb: Number(e.target.value) || 16,
+                          },
+                        })
+                      }
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-zinc-400 font-sans">CPU Thread Cores</label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="128"
+                      value={wrapperSettings.hostHardware?.cpuCores || 8}
+                      onChange={(e) =>
+                        updateWrapperSettings({
+                          hostHardware: {
+                            ...(wrapperSettings.hostHardware || { totalRamGb: 16, totalDiskGb: 500 }),
+                            cpuCores: Number(e.target.value) || 8,
+                          },
+                        })
+                      }
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-zinc-400 font-sans">Total Storage Drive (GB)</label>
+                    <input
+                      type="number"
+                      min="50"
+                      max="8000"
+                      value={wrapperSettings.hostHardware?.totalDiskGb || 500}
+                      onChange={(e) =>
+                        updateWrapperSettings({
+                          hostHardware: {
+                            ...(wrapperSettings.hostHardware || { totalRamGb: 16, cpuCores: 8 }),
+                            totalDiskGb: Number(e.target.value) || 500,
+                          },
+                        })
+                      }
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Clean Slate & Sample Data Purge */}
+              <div className="p-4 bg-rose-950/20 border border-rose-900/40 rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-rose-400">
+                  <Eraser className="w-4 h-4" />
+                  <span className="text-xs font-bold uppercase tracking-wide">
+                    Clean Slate / Reset Test Data
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  Ready to publish or start fresh? Purge all pre-seeded demo servers, mock logs, and sample download records with one click so your launcher starts with a 100% blank slate.
+                </p>
+
+                <div className="pt-1 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsPurgeModalOpen(true)}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-md shadow-rose-950/50 cursor-pointer transition-colors"
+                  >
+                    Wipe Sample Data & Start Blank
+                  </button>
+                  <span className="text-[11px] text-zinc-500 font-mono">
+                    Currently: {servers.length} configured server(s)
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: NETWORKING */}
           {activeTab === 'networking' && (
             <form onSubmit={handleSave} className="space-y-6">
-              {/* WebGUI Port & Binding */}
               <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-4">
                 <div className="flex items-center gap-2">
                   <Wifi className="w-4 h-4 text-emerald-400" />
@@ -535,7 +699,7 @@ Read-Host "MMSM process ended. Press Enter to close"
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
                     />
                     <p className="text-[11px] text-zinc-500 font-mono">
-                      Access the web dashboard at: <strong className="text-emerald-400">http://localhost:{wrapperSettings.wrapperWebPort || 3000}</strong>
+                      Access URL: <strong className="text-emerald-400">http://localhost:{wrapperSettings.wrapperWebPort || 3000}</strong>
                     </p>
                   </div>
 
@@ -551,74 +715,36 @@ Read-Host "MMSM process ended. Press Enter to close"
                           wrapperBindHost: e.target.value as '0.0.0.0' | '127.0.0.1',
                         })
                       }
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 font-mono focus:outline-none"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
                     >
-                      <option value="0.0.0.0">0.0.0.0 (All Interfaces - LAN & WAN access)</option>
-                      <option value="127.0.0.1">127.0.0.1 (Localhost only - No external access)</option>
+                      <option value="0.0.0.0">0.0.0.0 (All interfaces / LAN & WAN)</option>
+                      <option value="127.0.0.1">127.0.0.1 (Localhost only)</option>
                     </select>
-                    <p className="text-[11px] text-zinc-500 font-mono">
-                      Allows managing servers from other computers on your home/office network.
-                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Public Player Connection IP / Domain */}
+              {/* Public Host / Domain */}
               <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-4">
                 <div className="flex items-center gap-2">
                   <Globe className="w-4 h-4 text-emerald-400" />
                   <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
-                    Public Game Connection IP / Domain
+                    Default Public Connect IP / Domain
                   </span>
                 </div>
 
                 <div className="space-y-1.5 text-xs">
-                  <label className="text-zinc-300 font-medium">Public IP / Hostname for Players</label>
+                  <label className="text-zinc-300 font-medium">Default Server Join Address</label>
                   <input
                     type="text"
-                    placeholder="e.g. play.craftyfleet.com or 142.250.190.46"
                     value={wrapperSettings.publicIp || ''}
                     onChange={(e) => updateWrapperSettings({ publicIp: e.target.value })}
+                    placeholder="e.g. play.mydomain.com or 192.168.1.50"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
                   />
                   <p className="text-[11px] text-zinc-500 font-mono">
-                    This public hostname is shown on each server dashboard card so players can easily copy the server address.
+                    Individual servers can also override this with their own custom domain and display port on each card.
                   </p>
-                </div>
-              </div>
-
-              {/* Server Auto-Allocation Port Range */}
-              <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-4">
-                <div className="flex items-center gap-2">
-                  <Server className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
-                    Minecraft Instance Port Range Auto-Allocation
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono">
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400 block font-sans">Start Port</label>
-                    <input
-                      type="number"
-                      value={wrapperSettings.portRangeStart}
-                      onChange={(e) =>
-                        updateWrapperSettings({ portRangeStart: Number(e.target.value) })
-                      }
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-zinc-400 block font-sans">End Port</label>
-                    <input
-                      type="number"
-                      value={wrapperSettings.portRangeEnd}
-                      onChange={(e) =>
-                        updateWrapperSettings({ portRangeEnd: Number(e.target.value) })
-                      }
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none"
-                    />
-                  </div>
                 </div>
               </div>
 
@@ -633,164 +759,19 @@ Read-Host "MMSM process ended. Press Enter to close"
             </form>
           )}
 
-          {/* TAB 3: GITHUB AUTO-UPDATER */}
+          {/* TAB 5: UPDATER */}
           {activeTab === 'updater' && (
             <div className="space-y-6">
-              {/* Updater Status Card */}
-              <div className="p-5 bg-zinc-900/90 border border-zinc-800 rounded-xl space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="p-5 bg-zinc-900/90 rounded-2xl border border-zinc-800 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                       <GitBranch className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
-                        <span>GitHub Release Sync</span>
-                        {wrapperSettings.githubUpdate.hasUpdate ? (
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-800 text-emerald-400 font-bold">
-                            Update Available: {wrapperSettings.githubUpdate.latestVersion}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400">
-                            Up to date ({wrapperSettings.githubUpdate.currentVersion})
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-xs text-zinc-400">
-                        Repository: <a href={wrapperSettings.githubUpdate.repoUrl} target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline font-mono">{wrapperSettings.githubUpdate.repoUrl}</a>
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleCheckUpdatesNow}
-                    disabled={isCheckingUpdate || isUpdatingWrapper}
-                    className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-2 border border-zinc-700 cursor-pointer transition-colors disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isCheckingUpdate ? 'animate-spin text-emerald-400' : ''}`} />
-                    <span>{isCheckingUpdate ? 'Checking GitHub...' : 'Check for Updates'}</span>
-                  </button>
-                </div>
-
-                {updateCheckNotice && (
-                  <div className="p-3 bg-emerald-950/60 border border-emerald-800 text-xs text-emerald-300 rounded-lg flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>{updateCheckNotice}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Available Update Details & Action */}
-              {wrapperSettings.githubUpdate.hasUpdate && (
-                <div className="p-5 bg-gradient-to-br from-emerald-950/40 via-zinc-900 to-zinc-900 border border-emerald-800/60 rounded-xl space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-mono tracking-wider font-bold text-emerald-400">
-                        Latest GitHub Release
-                      </span>
-                      <h4 className="text-sm font-bold text-zinc-100 mt-0.5">
-                        {wrapperSettings.githubUpdate.releaseTitle || `MMSM Release ${wrapperSettings.githubUpdate.latestVersion}`}
-                      </h4>
+                      <h3 className="text-sm font-bold text-zinc-100">MMSM Launcher Core Release</h3>
                       <p className="text-xs text-zinc-400 font-mono">
-                        Published {wrapperSettings.githubUpdate.publishedAt || 'recently'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Release Notes */}
-                  <div className="p-3.5 bg-zinc-950/90 border border-zinc-800 rounded-lg text-xs text-zinc-300 font-mono whitespace-pre-line leading-relaxed">
-                    {wrapperSettings.githubUpdate.releaseNotes}
-                  </div>
-
-                  {/* Graceful Safety Warning */}
-                  <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-lg flex items-start gap-2.5 text-xs text-amber-300">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <p>
-                      <strong>Graceful Fleet Shutdown:</strong> When you update, MMSM will broadcast a warning to all connected players, gracefully stop all {onlineCount} online Minecraft server(s), apply the update from GitHub, and restart cleanly.
-                    </p>
-                  </div>
-
-                  {/* Trigger Update Button */}
-                  <div className="flex items-center justify-between pt-2">
-                    <div className="flex items-center gap-4 text-xs text-zinc-400">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={wrapperSettings.githubUpdate.autoRestartServersAfterUpdate}
-                          onChange={(e) =>
-                            updateWrapperSettings({
-                              githubUpdate: {
-                                ...wrapperSettings.githubUpdate,
-                                autoRestartServersAfterUpdate: e.target.checked,
-                              },
-                            })
-                          }
-                          className="accent-emerald-500 rounded"
-                        />
-                        <span>Auto-restart servers after update</span>
-                      </label>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => performGitHubUpdate()}
-                      disabled={isUpdatingWrapper}
-                      className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-950/50 flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
-                    >
-                      {isUpdatingWrapper ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Applying Update...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-4 h-4" />
-                          <span>Update Launcher Now ({wrapperSettings.githubUpdate.latestVersion})</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Live Upgrade Progress Modal / Overlay */}
-              {isUpdatingWrapper && (
-                <div className="p-5 bg-zinc-900 border border-emerald-500/50 rounded-xl space-y-3 animate-pulse">
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
-                    <div>
-                      <p className="text-xs font-bold text-zinc-100">Automated Update in Progress</p>
-                      <p className="text-xs text-emerald-400 font-mono">{updateProgressStep}</p>
-                    </div>
-                  </div>
-                  <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
-                    <div className="bg-emerald-500 h-full w-3/4 animate-pulse" />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 4: STANDALONE LAUNCHERS (.BAT / CMD / .EXE) */}
-          {activeTab === 'launcher' && (
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <h3 className="text-sm font-bold text-zinc-200">Standalone Startup Launcher (.bat & CMD)</h3>
-                <p className="text-xs text-zinc-400">
-                  Run this wrapper easily on Windows 11 / 10, Linux or macOS by launching the batch script or terminal command.
-                </p>
-              </div>
-
-              {/* Windows 11 Fix Explanation & One-Click Download Box */}
-              <div className="p-4 bg-emerald-950/20 border border-emerald-800/40 rounded-xl space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <Terminal className="w-5 h-5 text-emerald-400 shrink-0" />
-                    <div>
-                      <h4 className="text-xs font-bold text-zinc-100">start-mmsm.bat (Windows 11 / 10 Launcher)</h4>
-                      <p className="text-[11px] text-zinc-400">
-                        Anchored to project root directory with <code className="text-emerald-400 font-mono">cd /d "%~dp0"</code> and <code className="text-emerald-400 font-mono">call npm run dev</code> so it never closes unexpectedly.
+                        Current: <strong className="text-zinc-200">{wrapperSettings.githubUpdate.currentVersion}</strong> · Latest: <strong className="text-emerald-400">{wrapperSettings.githubUpdate.latestVersion}</strong>
                       </p>
                     </div>
                   </div>
@@ -798,85 +779,84 @@ Read-Host "MMSM process ended. Press Enter to close"
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      disabled={isCheckingUpdate || isUpdatingWrapper}
+                      onClick={handleCheckUpdatesNow}
+                      className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 border border-zinc-700 cursor-pointer disabled:opacity-50"
+                    >
+                      {isCheckingUpdate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      <span>Check GitHub</span>
+                    </button>
+
+                    {wrapperSettings.githubUpdate.hasUpdate && (
+                      <button
+                        type="button"
+                        disabled={isUpdatingWrapper}
+                        onClick={() => performGitHubUpdate()}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-950/50 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {isUpdatingWrapper ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                        <span>Update Now</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {updateCheckNotice && (
+                  <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-xl text-xs text-emerald-300 font-mono">
+                    {updateCheckNotice}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: LAUNCHER & WINDOWS 11 GUIDE */}
+          {activeTab === 'launcher' && (
+            <div className="space-y-6">
+              <div className="p-5 bg-zinc-900/90 rounded-2xl border border-zinc-800 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                      <Terminal className="w-4 h-4 text-emerald-400" />
+                      <span>Windows 11 Startup Launchers (.bat & .ps1)</span>
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      Pre-configured launchers with peer-dependency protection & directory auto-detection.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
                       onClick={handleDownloadLauncher}
-                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer transition-colors"
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer"
                     >
                       <Download className="w-4 h-4" />
                       <span>Download start-mmsm.bat</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        const debugScript = `@echo off\ntitle MMSM Diagnostic Launcher\ncolor 0E\ncls\ncd /d "%~dp0"\necho Current Directory: %CD%\nif not exist "%~dp0package.json" ( echo [ERROR] package.json missing in %~dp0! & pause & exit /b 1 )\nnode -v\nnpm -v\ncall npm run dev\npause\n`;
-                        const blob = new Blob([debugScript], { type: 'text/plain;charset=utf-8' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'start-mmsm-debug.bat';
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      }}
-                      className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 border border-zinc-700 cursor-pointer transition-colors"
+                      onClick={handleDownloadPs1}
+                      className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 border border-zinc-700 cursor-pointer"
                     >
                       <Download className="w-4 h-4" />
-                      <span>Download Debug .bat</span>
+                      <span>Download start-mmsm.ps1</span>
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Windows 11 Instant-Close Diagnosis & Solution */}
-              <div className="p-4 bg-zinc-900/70 border border-zinc-800 rounded-xl space-y-2 text-xs text-zinc-300">
-                <p className="font-bold text-zinc-100 flex items-center gap-2">
-                  <HelpCircle className="w-4 h-4 text-emerald-400" />
-                  <span>Why did the previous .bat file instantly close on Windows 11?</span>
-                </p>
-                <ul className="list-disc list-inside space-y-1 text-[11px] text-zinc-400 leading-relaxed font-mono">
-                  <li>
-                    <strong>Working directory mismatch:</strong> Double-clicking batch files from Windows Explorer can launch with working directory set to System32 instead of the app folder.
-                  </li>
-                  <li>
-                    <strong>Process chaining without CALL:</strong> Running <code className="text-zinc-200">npm run dev</code> directly in CMD terminates the batch file when npm finishes or throws an error.
-                  </li>
-                  <li>
-                    <strong>The Fix:</strong> The new <strong className="text-emerald-400">start-mmsm.bat</strong> uses <code className="text-zinc-200">cd /d "%~dp0"</code> to anchor the folder, checks Node.js/NPM in PATH, and runs <code className="text-zinc-200">call npm run dev</code> followed by <code className="text-zinc-200">pause</code> so the command prompt stays open even if an error occurs.
-                  </li>
-                </ul>
-              </div>
-
-              {/* Script Code Preview */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
-                  <span>Batch Script Contents (start-mmsm.bat):</span>
-                  <button
-                    type="button"
-                    onClick={handleCopyBatch}
-                    className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 cursor-pointer font-sans"
-                  >
-                    {copiedBatch ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedBatch ? 'Copied!' : 'Copy Script'}</span>
-                  </button>
-                </div>
-
-                <pre className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl text-[11px] font-mono text-zinc-300 overflow-x-auto leading-relaxed max-h-48 overflow-y-auto">
-                  {batchScriptContent}
-                </pre>
-              </div>
-
               {/* Quick Launch Steps */}
-              <div className="p-4 bg-zinc-900/60 rounded-xl border border-zinc-800 space-y-2 text-xs text-zinc-400">
-                <p className="font-semibold text-zinc-200">Quick start instructions:</p>
-                <ol className="list-decimal list-inside space-y-1 font-mono text-[11px]">
-                  <li>Download or copy the project files to your PC.</li>
-                  <li>Ensure Node.js (v18+) is installed from <a href="https://nodejs.org" target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline">nodejs.org</a>.</li>
-                  <li>Double click <strong className="text-emerald-400">start-mmsm.bat</strong> (or run <code className="text-zinc-200">start-mmsm.ps1</code> in PowerShell).</li>
-                  <li>MMSM WebGUI opens automatically in your browser at <strong className="text-zinc-200">http://localhost:3000</strong>.</li>
-                </ol>
+              <div className="p-4 bg-zinc-900/60 rounded-xl border border-zinc-800 space-y-2 text-xs text-zinc-300">
+                <p className="font-semibold text-zinc-100">Simple one-line terminal launch:</p>
+                <code className="block p-3 bg-zinc-950 rounded-lg text-emerald-400 font-mono text-xs border border-zinc-800 select-all">
+                  npm run dev
+                </code>
               </div>
             </div>
           )}
 
-          {/* TAB 5: ARCHIVED SERVERS VAULT */}
+          {/* TAB 7: VAULT */}
           {activeTab === 'vault' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -885,62 +865,44 @@ Read-Host "MMSM process ended. Press Enter to close"
                     Archived Servers ({archivedServers.length})
                   </h3>
                   <p className="text-xs text-zinc-500">
-                    Archived servers are kept offline and hidden from the dashboard. You can restore them anytime.
+                    Archived servers are kept offline and hidden from the dashboard.
                   </p>
                 </div>
               </div>
 
               {archivedServers.length === 0 ? (
-                <div className="p-8 text-center bg-zinc-900/40 border border-dashed border-zinc-800 rounded-2xl space-y-3">
-                  <div className="w-12 h-12 rounded-xl bg-zinc-800/80 flex items-center justify-center mx-auto text-zinc-500">
-                    <Archive className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-zinc-300">No Archived Servers</p>
-                    <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                      All your configured servers are currently active on the main dashboard. To archive a server, click the Archive button on any server card.
-                    </p>
-                  </div>
+                <div className="p-8 text-center bg-zinc-900/40 border border-dashed border-zinc-800 rounded-2xl space-y-2">
+                  <Archive className="w-8 h-8 text-zinc-600 mx-auto" />
+                  <p className="text-xs text-zinc-400">No servers are currently in the archive vault.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {archivedServers.map((srv) => (
                     <div
                       key={srv.id}
-                      className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-wrap items-center justify-between gap-4"
+                      className="p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-between gap-3"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-zinc-600" />
-                          <h4 className="text-sm font-bold text-zinc-200">{srv.name}</h4>
-                          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
-                            Archived
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-400 font-mono">
-                          {srv.loader.toUpperCase()} {srv.loaderVersion} · MC {srv.minecraftVersion} · Port :{srv.port} · {srv.mods.length} mods
-                        </p>
+                      <div>
+                        <span className="font-bold text-xs text-zinc-200 block">{srv.name}</span>
+                        <span className="text-[11px] text-zinc-500 font-mono">
+                          Port {srv.port} · {srv.loader.toUpperCase()} {srv.minecraftVersion}
+                        </span>
                       </div>
-
                       <div className="flex items-center gap-2">
                         <button
+                          type="button"
                           onClick={() => unarchiveServer(srv.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 text-xs font-semibold transition-colors cursor-pointer"
-                          title="Restore server back to active dashboard"
+                          className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 rounded-lg text-xs font-semibold cursor-pointer"
                         >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          <span>Restore Server</span>
+                          Restore
                         </button>
-
-                        {canPerformAction('manage_servers') && (
-                          <button
-                            onClick={() => setDeleteConfirmServer(srv)}
-                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950/40 text-zinc-500 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
-                            title="Permanently Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmServer(srv)}
+                          className="p-1.5 bg-zinc-800 hover:bg-rose-900/40 text-zinc-400 hover:text-rose-400 rounded-lg border border-zinc-700 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -951,40 +913,83 @@ Read-Host "MMSM process ended. Press Enter to close"
         </div>
       </div>
 
-      {/* IN-APP CONFIRMATION MODAL FOR DELETING ARCHIVED SERVER */}
-      {deleteConfirmServer && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-[#11151c] border border-zinc-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      {/* PURGE SAMPLE DATA CONFIRMATION MODAL */}
+      {isPurgeModalOpen && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#11151c] border border-rose-900/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center gap-3 text-rose-400">
               <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5" />
+                <Eraser className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-zinc-100">Permanently Delete Server?</h3>
-                <p className="text-xs text-zinc-400">Irreversible file deletion warning</p>
+                <h3 className="text-base font-bold text-zinc-100">Wipe All Sample Data?</h3>
+                <p className="text-xs text-zinc-400">Reset to completely clean slate</p>
               </div>
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              Are you sure you want to permanently delete <strong className="text-white font-mono">{deleteConfirmServer.name}</strong>?
-              All world files, configuration data, playerdata, and installed mods will be permanently erased.
+              This will remove all demo servers, mock logs, and sample alerts from your local storage. You will start with a completely empty, production-ready dashboard.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
               <button
-                onClick={() => setDeleteConfirmServer(null)}
-                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 cursor-pointer transition-colors"
+                type="button"
+                onClick={() => setIsPurgeModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
+                onClick={() => {
+                  purgeSampleData();
+                  setIsPurgeModalOpen(false);
+                  onClose();
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-950/50 cursor-pointer"
+              >
+                Confirm & Wipe Clean
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PERMANENT DELETE MODAL */}
+      {deleteConfirmServer && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#11151c] border border-rose-900/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-100">Permanently Delete Server?</h3>
+                <p className="text-xs text-zinc-400 font-mono">{deleteConfirmServer.name}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Are you sure you want to permanently delete <strong className="text-white font-mono">{deleteConfirmServer.name}</strong>? This action cannot be undone.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmServer(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   deleteServer(deleteConfirmServer.id);
                   setDeleteConfirmServer(null);
                 }}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-950/40 cursor-pointer transition-colors"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-950/50 cursor-pointer"
               >
-                Confirm Delete
+                Delete Forever
               </button>
             </div>
           </div>

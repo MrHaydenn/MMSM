@@ -101,6 +101,7 @@ interface ServerContextType {
     modpackId?: string;
   }) => MinecraftServer;
   deleteServer: (serverId: string) => void;
+  purgeSampleData: () => void;
   // Alerts
   alerts: {
     id: string;
@@ -2117,12 +2118,29 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const deleteServer = (serverId: string) => {
-    if (servers.length <= 1) return; // Keep at least 1 server
-    setServers((prev) => prev.filter((s) => s.id !== serverId));
-    if (activeServerId === serverId) {
-      const remaining = servers.filter((s) => s.id !== serverId);
-      if (remaining[0]) setActiveServerId(remaining[0].id);
-    }
+    setServers((prev) => {
+      const filtered = prev.filter((s) => s.id !== serverId);
+      if (activeServerId === serverId) {
+        setActiveServerId(filtered[0]?.id || '');
+      }
+      return filtered;
+    });
+
+    setServerLogs((prev) => {
+      const next = { ...prev };
+      delete next[serverId];
+      return next;
+    });
+  };
+
+  const purgeSampleData = () => {
+    setServers([]);
+    setActiveServerId('');
+    setServerLogs({});
+    setAlerts([]);
+    setDownloads([]);
+    localStorage.setItem('crafty_servers', JSON.stringify([]));
+    localStorage.setItem('crafty_logs', JSON.stringify({}));
   };
 
   const dismissAlert = (id: string) => {
@@ -2290,6 +2308,13 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       enableHttps: false,
       httpsPort: 3443,
       customWrapperLogoUrl: '',
+      accentColor: 'emerald',
+      customEmblemIcon: 'sword',
+      hostHardware: {
+        totalRamGb: (typeof navigator !== 'undefined' && (navigator as any).deviceMemory) ? (navigator as any).deviceMemory : 16,
+        cpuCores: (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : 8,
+        totalDiskGb: 500,
+      },
       serversDirectory: '/Servers',
       backupsDirectory: '/Backups',
       defaultMinRamGb: 2,
@@ -2848,6 +2873,7 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updateProperties,
         createServer,
         deleteServer,
+        purgeSampleData,
         alerts,
         dismissAlert,
         dismissAllAlerts,

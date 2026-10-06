@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   X,
   Pencil,
+  Trash2,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
@@ -49,6 +50,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
     restartServer,
     killServer,
     archiveServer,
+    deleteServer,
     wakeServer,
     wrapperSettings,
     setServerPublicIp,
@@ -57,11 +59,22 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
 
   const [copiedIpServerId, setCopiedIpServerId] = useState<string | null>(null);
   const [archiveModalServer, setArchiveModalServer] = useState<MinecraftServer | null>(null);
+  const [deleteModalServer, setDeleteModalServer] = useState<MinecraftServer | null>(null);
   const [editingIpServer, setEditingIpServer] = useState<MinecraftServer | null>(null);
   const [customIpInput, setCustomIpInput] = useState('');
   const [customPortInput, setCustomPortInput] = useState('');
   const [hidePortInput, setHidePortInput] = useState(false);
   const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'7d' | '30d'>('30d');
+
+  // Dynamic host platform detection
+  const detectHostPlatform = () => {
+    if (typeof navigator === 'undefined') return 'Linux x86_64';
+    const ua = navigator.userAgent;
+    if (ua.includes('Windows NT 10.0') || ua.includes('Windows')) return 'Windows 11 / 10 x64';
+    if (ua.includes('Mac OS X')) return 'macOS Apple Silicon / Intel';
+    if (ua.includes('Linux')) return 'Linux x86_64';
+    return 'Local Host Platform';
+  };
 
   // Filter out archived servers
   const activeFleet = servers.filter((s) => !s.isArchived);
@@ -160,11 +173,11 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
 
   return (
     <div className="p-4 md:p-8 max-w-[1600px] mx-auto w-full space-y-7 animate-in fade-in">
-      {/* Top Action & Compact Host Status (Title & Description removed for maximum space) */}
+      {/* Top Action & Compact Host Status */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
         <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
           <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-bold px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-800/50">
-            Host: Linux Debian x86_64
+            Host: {detectHostPlatform()}
           </span>
           <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
             {runningServers.length} / {activeFleet.length} Online
@@ -309,247 +322,281 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {activeFleet.map((srv) => {
-            const onlinePlayers = srv.players.filter((p) => p.online);
-            const ramUsed = (srv.telemetry.ramUsedMb / 1024).toFixed(1);
-            const ramMax = (srv.allocatedRamMb / 1024).toFixed(1);
-
-            const effectiveIp = srv.publicServerIp || wrapperSettings.publicIp || 'localhost';
-            const effectivePort = srv.publicServerPort !== undefined && srv.publicServerPort !== '' ? srv.publicServerPort : srv.port;
-            const serverAddress = srv.hidePublicPort ? effectiveIp : `${effectiveIp}:${effectivePort}`;
-            const isOnline = srv.status === 'online';
-
-            return (
-              <div
-                key={srv.id}
-                className="bg-[#11151c] border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all shadow-xl group"
+        {activeFleet.length === 0 ? (
+          <div className="p-12 text-center bg-[#11151c] border border-dashed border-zinc-800 rounded-3xl space-y-4 shadow-xl">
+            <div className="w-16 h-16 rounded-2xl bg-zinc-800/80 border border-zinc-700 flex items-center justify-center mx-auto text-emerald-400">
+              <Server className="w-8 h-8" />
+            </div>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-base font-bold text-zinc-100">Clean Slate — No Servers Configured</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Your server fleet is currently empty and ready for production. Click below to create your first Minecraft server instance with Fabric, NeoForge, Paper, Purpur, Quilt, Forge, or Vanilla.
+              </p>
+            </div>
+            {canPerformAction('manage_servers') && (
+              <button
+                type="button"
+                onClick={onOpenCreateModal}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-950/50 inline-flex items-center gap-2 transition-colors cursor-pointer"
               >
-                {/* Server Header */}
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="relative shrink-0">
-                        {srv.serverIconUrl ? (
+                <Plus className="w-4 h-4" />
+                <span>Create Your First Server</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {activeFleet.map((srv) => {
+              const onlinePlayers = srv.players.filter((p) => p.online);
+              const ramUsed = (srv.telemetry.ramUsedMb / 1024).toFixed(1);
+              const ramMax = (srv.allocatedRamMb / 1024).toFixed(1);
+
+              const effectiveIp = srv.publicServerIp || wrapperSettings.publicIp || 'localhost';
+              const effectivePort = srv.publicServerPort !== undefined && srv.publicServerPort !== '' ? srv.publicServerPort : srv.port;
+              const serverAddress = srv.hidePublicPort ? effectiveIp : `${effectiveIp}:${effectivePort}`;
+              const isOnline = srv.status === 'online';
+
+              return (
+                <div
+                  key={srv.id}
+                  className="bg-[#11151c] border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all shadow-xl group"
+                >
+                  {/* Server Header */}
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="relative shrink-0">
+                          {srv.serverIconUrl ? (
+                            <img
+                              src={srv.serverIconUrl}
+                              alt={srv.name}
+                              className="w-10 h-10 rounded-xl border border-zinc-700 bg-zinc-800 object-contain p-0.5"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src =
+                                  'https://api.iconify.design/pixelarticons:sword.svg';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-emerald-400 font-bold text-xs">
+                              MC
+                            </div>
+                          )}
+                          <span
+                            className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#11151c] ${getStatusColor(
+                              srv.status
+                            )}`}
+                          />
+                        </div>
+
+                        <div
+                          onClick={() => onSelectServer(srv)}
+                          className="cursor-pointer"
+                          title="Manage this server"
+                        >
+                          <h3 className="font-bold text-base text-zinc-100 group-hover:text-emerald-400 hover:underline transition-colors flex items-center gap-1.5">
+                            <span>{srv.name}</span>
+                          </h3>
+                          <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                            Port: <span className="text-zinc-200 font-bold">{srv.port}</span> · {srv.loader.toUpperCase()} {srv.loaderVersion} (MC {srv.minecraftVersion})
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Public Connection Address Bar */}
+                    <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800/80 text-xs font-mono">
+                      <div className="flex items-center gap-1.5 text-zinc-300 truncate">
+                        <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">{serverAddress}</span>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0 ml-1.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingIpServer(srv);
+                            setCustomIpInput(srv.publicServerIp || '');
+                            setCustomPortInput(srv.publicServerPort !== undefined ? String(srv.publicServerPort) : '');
+                            setHidePortInput(!!srv.hidePublicPort);
+                          }}
+                          className="p-1 text-zinc-400 hover:text-emerald-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                          title="Edit custom join domain/IP and display port for this server"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={(e) => handleCopyIp(srv, e)}
+                          className="p-1 text-zinc-400 hover:text-white rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                          title="Copy connection IP:port"
+                        >
+                          {copiedIpServerId === srv.id ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Telemetry Strip */}
+                    <div className="grid grid-cols-3 gap-2 bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800/80 text-center font-mono text-xs">
+                      <div>
+                        <span className="text-[10px] text-zinc-500 block uppercase">TPS</span>
+                        <span
+                          className={`font-semibold ${
+                            srv.telemetry.tps >= 19.5 ? 'text-emerald-400' : 'text-amber-400'
+                          }`}
+                        >
+                          {isOnline ? srv.telemetry.tps.toFixed(1) : '0.0'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-zinc-500 block uppercase">RAM</span>
+                        <span className="font-semibold text-zinc-200">
+                          {isOnline ? `${ramUsed}G` : `0/${ramMax}G`}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-zinc-500 block uppercase">Players</span>
+                        <span className="font-semibold text-emerald-400">
+                          {onlinePlayers.length}/{srv.properties.maxPlayers}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Individual Server Networking Rates */}
+                    <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-900/50 border border-zinc-800/60 text-[11px] font-mono text-zinc-400">
+                      <span className="flex items-center gap-1">
+                        <Wifi className="w-3 h-3 text-emerald-400" />
+                        <span>Network I/O:</span>
+                      </span>
+                      <span className="text-zinc-200">
+                        {isOnline ? (
+                          <>
+                            <span className="text-emerald-400 font-semibold">↓ {(srv.telemetry.networkInKb).toFixed(1)} KB/s</span>{' '}
+                            <span className="text-cyan-400 font-semibold">↑ {(srv.telemetry.networkOutKb).toFixed(1)} KB/s</span>
+                          </>
+                        ) : (
+                          <span className="text-zinc-600">0.0 KB/s</span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Online Player Skin Avatars */}
+                    {onlinePlayers.length > 0 && (
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <span className="text-[10px] text-zinc-500 font-mono mr-1">Playing:</span>
+                        {onlinePlayers.slice(0, 5).map((p) => (
                           <img
-                            src={srv.serverIconUrl}
-                            alt={srv.name}
-                            className="w-10 h-10 rounded-xl border border-zinc-700 bg-zinc-800 object-contain p-0.5"
+                            key={p.uuid}
+                            src={`https://mc-heads.net/avatar/${p.username}/24`}
+                            alt={p.username}
+                            title={p.username}
+                            className="w-5 h-5 rounded border border-zinc-700 bg-zinc-800"
                             onError={(e) => {
                               (e.target as HTMLImageElement).src =
-                                'https://api.iconify.design/pixelarticons:sword.svg';
+                                'https://mc-heads.net/avatar/MHF_Steve/24';
                             }}
                           />
-                        ) : (
-                          <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-emerald-400 font-bold text-xs">
-                            MC
-                          </div>
-                        )}
-                        <span
-                          className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#11151c] ${getStatusColor(
-                            srv.status
-                          )}`}
-                        />
+                        ))}
                       </div>
-
-                      <div
-                        onClick={() => onSelectServer(srv)}
-                        className="cursor-pointer"
-                        title="Manage this server"
-                      >
-                        <h3 className="font-bold text-base text-zinc-100 group-hover:text-emerald-400 hover:underline transition-colors flex items-center gap-1.5">
-                          <span>{srv.name}</span>
-                        </h3>
-                        <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
-                          Port: <span className="text-zinc-200 font-bold">{srv.port}</span> · {srv.loader.toUpperCase()} {srv.loaderVersion} (MC {srv.minecraftVersion})
-                        </p>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
-                  {/* Public Connection Address Bar */}
-                  <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800/80 text-xs font-mono">
-                    <div className="flex items-center gap-1.5 text-zinc-300 truncate">
-                      <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span className="truncate">{serverAddress}</span>
-                    </div>
-                    <div className="flex items-center gap-0.5 shrink-0 ml-1.5">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingIpServer(srv);
-                          setCustomIpInput(srv.publicServerIp || '');
-                          setCustomPortInput(srv.publicServerPort !== undefined ? String(srv.publicServerPort) : '');
-                          setHidePortInput(!!srv.hidePublicPort);
-                        }}
-                        className="p-1 text-zinc-400 hover:text-emerald-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
-                        title="Edit custom join domain/IP and display port for this server"
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={(e) => handleCopyIp(srv, e)}
-                        className="p-1 text-zinc-400 hover:text-white rounded hover:bg-zinc-800 transition-colors cursor-pointer"
-                        title="Copy connection IP:port"
-                      >
-                        {copiedIpServerId === srv.id ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  {/* Footer Controls */}
+                  <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2">
+                    {canPerformAction('server_power') && (
+                      <div className="flex items-center gap-1">
+                        {srv.status === 'sleeping' ? (
+                          <button
+                            onClick={() => wakeServer(srv.id)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 text-xs font-semibold transition-colors cursor-pointer"
+                            title="Wake server from standby hibernation"
+                          >
+                            <span>💤 Wake Server</span>
+                          </button>
+                        ) : srv.status === 'offline' ? (
+                          <button
+                            onClick={() => startServer(srv.id)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 text-xs font-semibold transition-colors cursor-pointer"
+                            title="Start server process"
+                          >
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>Start</span>
+                          </button>
                         ) : (
-                          <Copy className="w-3.5 h-3.5" />
+                          <>
+                            <button
+                              onClick={() => restartServer(srv.id)}
+                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition-colors cursor-pointer"
+                              title="Gracefully restart server"
+                            >
+                              <RotateCw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => stopServer(srv.id)}
+                              className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-600/30 transition-colors cursor-pointer"
+                              title="Gracefully stop server (/stop)"
+                            >
+                              <Square className="w-3.5 h-3.5 fill-current" />
+                            </button>
+                            <button
+                              onClick={() => killServer(srv.id)}
+                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950/40 text-zinc-500 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
+                              title="Force Kill (SIGKILL)"
+                            >
+                              <Skull className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         )}
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* Telemetry Strip */}
-                  <div className="grid grid-cols-3 gap-2 bg-zinc-900/80 p-2.5 rounded-xl border border-zinc-800/80 text-center font-mono text-xs">
-                    <div>
-                      <span className="text-[10px] text-zinc-500 block uppercase">TPS</span>
-                      <span
-                        className={`font-semibold ${
-                          srv.telemetry.tps >= 19.5 ? 'text-emerald-400' : 'text-amber-400'
-                        }`}
-                      >
-                        {isOnline ? srv.telemetry.tps.toFixed(1) : '0.0'}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-zinc-500 block uppercase">RAM</span>
-                      <span className="font-semibold text-zinc-200">
-                        {isOnline ? `${ramUsed}G` : `0/${ramMax}G`}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-zinc-500 block uppercase">Players</span>
-                      <span className="font-semibold text-emerald-400">
-                        {onlinePlayers.length}/{srv.properties.maxPlayers}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Individual Server Networking Rates */}
-                  <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-900/50 border border-zinc-800/60 text-[11px] font-mono text-zinc-400">
-                    <span className="flex items-center gap-1">
-                      <Wifi className="w-3 h-3 text-emerald-400" />
-                      <span>Network I/O:</span>
-                    </span>
-                    <span className="text-zinc-200">
-                      {isOnline ? (
-                        <>
-                          <span className="text-emerald-400 font-semibold">↓ {(srv.telemetry.networkInKb).toFixed(1)} KB/s</span>{' '}
-                          <span className="text-cyan-400 font-semibold">↑ {(srv.telemetry.networkOutKb).toFixed(1)} KB/s</span>
-                        </>
-                      ) : (
-                        <span className="text-zinc-600">0.0 KB/s</span>
-                      )}
-                    </span>
-                  </div>
-
-                  {/* Online Player Skin Avatars */}
-                  {onlinePlayers.length > 0 && (
-                    <div className="flex items-center gap-1.5 pt-0.5">
-                      <span className="text-[10px] text-zinc-500 font-mono mr-1">Playing:</span>
-                      {onlinePlayers.slice(0, 5).map((p) => (
-                        <img
-                          key={p.uuid}
-                          src={`https://mc-heads.net/avatar/${p.username}/24`}
-                          alt={p.username}
-                          title={p.username}
-                          className="w-5 h-5 rounded border border-zinc-700 bg-zinc-800"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src =
-                              'https://mc-heads.net/avatar/MHF_Steve/24';
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer Controls: Start, Stop, Restart, Kill and Manage Server Button */}
-                <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2">
-                  {/* Power Actions (Start, Restart, Stop, Kill, Wake) */}
-                  {canPerformAction('server_power') && (
-                    <div className="flex items-center gap-1">
-                      {srv.status === 'sleeping' ? (
-                        <button
-                          onClick={() => wakeServer(srv.id)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 text-xs font-semibold transition-colors cursor-pointer"
-                          title="Wake server from standby hibernation"
-                        >
-                          <span>💤 Wake Server</span>
-                        </button>
-                      ) : srv.status === 'offline' ? (
-                        <button
-                          onClick={() => startServer(srv.id)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 text-xs font-semibold transition-colors cursor-pointer"
-                          title="Start server process"
-                        >
-                          <Play className="w-3 h-3 fill-current" />
-                          <span>Start</span>
-                        </button>
-                      ) : (
-                        <>
+                        {/* Archive action */}
+                        {srv.status === 'online' || srv.status === 'starting' ? (
                           <button
-                            onClick={() => restartServer(srv.id)}
-                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition-colors cursor-pointer"
-                            title="Gracefully restart server"
+                            disabled
+                            className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed transition-colors"
+                            title="Stop the server to archive it"
                           >
-                            <RotateCw className="w-3.5 h-3.5" />
+                            <Archive className="w-3.5 h-3.5" />
                           </button>
+                        ) : (
                           <button
-                            onClick={() => stopServer(srv.id)}
-                            className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-600/30 transition-colors cursor-pointer"
-                            title="Gracefully stop server (/stop)"
+                            onClick={() => setArchiveModalServer(srv)}
+                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-amber-950/40 text-zinc-500 hover:text-amber-400 border border-zinc-800 transition-colors cursor-pointer"
+                            title="Archive server"
                           >
-                            <Square className="w-3.5 h-3.5 fill-current" />
+                            <Archive className="w-3.5 h-3.5" />
                           </button>
+                        )}
+
+                        {/* Direct Delete button */}
+                        {canPerformAction('manage_servers') && (
                           <button
-                            onClick={() => killServer(srv.id)}
+                            onClick={() => setDeleteModalServer(srv)}
                             className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950/40 text-zinc-500 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
-                            title="Force Kill (SIGKILL)"
+                            title="Delete this server"
                           >
-                            <Skull className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        </>
-                      )}
+                        )}
+                      </div>
+                    )}
 
-                      {/* Archive action with confirmation prompt */}
-                      {srv.status === 'online' || srv.status === 'starting' ? (
-                        <button
-                          disabled
-                          className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-600 opacity-40 cursor-not-allowed transition-colors"
-                          title="Stop the server to archive it"
-                        >
-                          <Archive className="w-3.5 h-3.5" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setArchiveModalServer(srv)}
-                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-amber-950/40 text-zinc-500 hover:text-amber-400 border border-zinc-800 transition-colors cursor-pointer"
-                          title="Archive server"
-                        >
-                          <Archive className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Primary Manage Button */}
-                  <button
-                    onClick={() => onSelectServer(srv)}
-                    className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-colors cursor-pointer ml-auto"
-                  >
-                    <span>Manage Server</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                    {/* Primary Manage Button */}
+                    <button
+                      onClick={() => onSelectServer(srv)}
+                      className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 transition-colors cursor-pointer ml-auto"
+                    >
+                      <span>Manage Server</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* OVERALL SYSTEM ANALYTICS SECTION (Below Servers List) */}
@@ -839,6 +886,46 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                 className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-lg shadow-amber-950/40 cursor-pointer transition-colors"
               >
                 Confirm Archive
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL FOR DELETING SERVER */}
+      {deleteModalServer && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#11151c] border border-rose-900/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-100">Permanently Delete Server?</h3>
+                <p className="text-xs text-zinc-400 font-mono">{deleteModalServer.name} (Port {deleteModalServer.port})</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Are you sure you want to permanently delete <strong className="text-white font-mono">{deleteModalServer.name}</strong>?
+              All server files, worlds, plugins, and logs associated with this server will be removed.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                onClick={() => setDeleteModalServer(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  deleteServer(deleteModalServer.id);
+                  setDeleteModalServer(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-950/40 cursor-pointer transition-colors"
+              >
+                Delete Server Forever
               </button>
             </div>
           </div>

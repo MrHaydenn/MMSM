@@ -19,6 +19,8 @@ import {
   Check,
   Play,
   Wifi,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
@@ -33,10 +35,12 @@ export const ConfigEditor: React.FC = () => {
     toggleSleepMode,
     wakeServer,
     putServerToSleep,
+    deleteServer,
   } = useServer();
   const { canPerformAction } = useAuth();
 
   const [mode, setMode] = useState<'visual' | 'raw'>('visual');
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [formData, setFormData] = useState<ServerProperties>({
     levelName: 'world',
     levelSeed: '',
@@ -820,6 +824,71 @@ export const ConfigEditor: React.FC = () => {
               </button>
             </div>
           )}
+        </div>
+      )}
+      {/* DANGER ZONE: DELETE SERVER */}
+      <div className="bg-rose-950/20 border border-rose-900/40 rounded-xl p-5 space-y-3">
+        <div className="flex items-center gap-2 text-rose-400">
+          <AlertTriangle className="w-4 h-4" />
+          <h3 className="text-sm font-bold uppercase tracking-wider">Danger Zone</h3>
+        </div>
+        <p className="text-xs text-zinc-300 leading-relaxed">
+          Permanently delete <strong className="text-white font-mono">{activeServer.name}</strong>. This removes the server configuration, worlds, mods, and telemetry history from the launcher.
+        </p>
+
+        {canPerformAction('manage_servers') && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-950/40 flex items-center gap-2 cursor-pointer transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Delete This Server</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* CONFIRMATION MODAL FOR DELETING SERVER */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#11151c] border border-rose-900/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-100">Permanently Delete Server?</h3>
+                <p className="text-xs text-zinc-400 font-mono">{activeServer.name}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Are you sure you want to permanently delete <strong className="text-white font-mono">{activeServer.name}</strong>?
+              All server files, worlds, and plugins will be removed.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteServer(activeServer.id);
+                  setIsDeleteModalOpen(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-950/40 cursor-pointer transition-colors"
+              >
+                Delete Server Forever
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

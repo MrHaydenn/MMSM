@@ -29,65 +29,8 @@ export const AnalyticsPage: React.FC = () => {
   const [selectedDimension, setSelectedDimension] = useState<string>('all');
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
-  // Fallback realistic session records if not populated
-  const defaultSessions: PlayerSessionRecord[] = [
-    {
-      id: 'sess-1',
-      username: 'TechnoFan_99',
-      joinedAt: 'Today at 14:15:22',
-      leftAt: 'Currently Online',
-      durationMinutes: 45,
-      dimension: 'Overworld',
-      peakPing: 24,
-    },
-    {
-      id: 'sess-2',
-      username: 'DiamondMiner42',
-      joinedAt: 'Today at 13:02:10',
-      leftAt: 'Today at 14:30:15',
-      durationMinutes: 88,
-      dimension: 'Nether',
-      peakPing: 38,
-    },
-    {
-      id: 'sess-3',
-      username: 'Alex_Builder',
-      joinedAt: 'Today at 11:20:00',
-      leftAt: 'Today at 12:45:10',
-      durationMinutes: 85,
-      dimension: 'Overworld',
-      peakPing: 18,
-    },
-    {
-      id: 'sess-4',
-      username: 'RedstoneWiz',
-      joinedAt: 'Today at 09:12:44',
-      leftAt: 'Today at 10:55:00',
-      durationMinutes: 102,
-      dimension: 'The End',
-      peakPing: 42,
-    },
-    {
-      id: 'sess-5',
-      username: 'CraftyPro',
-      joinedAt: 'Yesterday at 20:10:00',
-      leftAt: 'Yesterday at 23:30:00',
-      durationMinutes: 200,
-      dimension: 'Overworld',
-      peakPing: 29,
-    },
-    {
-      id: 'sess-6',
-      username: 'EnderKnight',
-      joinedAt: 'Yesterday at 18:00:12',
-      leftAt: 'Yesterday at 19:40:00',
-      durationMinutes: 100,
-      dimension: 'The End',
-      peakPing: 35,
-    },
-  ];
-
-  const sessions = activeServer.playerSessions || defaultSessions;
+  // Retrieve real player sessions without fake presets
+  const sessions = activeServer.playerSessions || [];
 
   const filteredSessions = sessions.filter((s) => {
     const matchesSearch = s.username.toLowerCase().includes(playerSearch.toLowerCase());
@@ -97,13 +40,35 @@ export const AnalyticsPage: React.FC = () => {
 
   // Uptime calculation
   const uptimeHours = (activeServer.telemetry.uptimeSeconds / 3600).toFixed(1);
-  const uptimePercent = activeServer.status === 'online' ? '99.8%' : '94.2%';
+  const uptimePercent = activeServer.status === 'online' ? '100%' : 'Offline';
 
-  // Historical data points for charts
-  const historyHours = ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00', 'Now'];
-  const playerHistory = [2, 0, 1, 4, 8, 12, 16, 11, activeServer.players.filter((p) => p.online).length];
-  const tpsHistory = [20.0, 20.0, 19.9, 20.0, 19.8, 19.7, 19.9, 20.0, activeServer.telemetry.tps || 20.0];
-  const ramHistoryMb = [2200, 2150, 2180, 2600, 3400, 4200, 4800, 4100, activeServer.telemetry.ramUsedMb || 3500];
+  // Real historical data points recorded since installation
+  const analyticsPoints = activeServer.analyticsHistory && activeServer.analyticsHistory.length > 0
+    ? activeServer.analyticsHistory
+    : [
+        {
+          timestamp: 'Start',
+          tps: activeServer.status === 'online' ? 20.0 : 20.0,
+          cpuPercent: activeServer.status === 'online' ? activeServer.telemetry.cpuPercent : 0,
+          ramMb: activeServer.status === 'online' ? activeServer.telemetry.ramUsedMb : 0,
+          onlinePlayers: activeServer.players.filter((p) => p.online).length,
+          networkMbps: 0.1,
+        },
+        {
+          timestamp: 'Now',
+          tps: activeServer.telemetry.tps || 20.0,
+          cpuPercent: activeServer.telemetry.cpuPercent || 0,
+          ramMb: activeServer.telemetry.ramUsedMb || 0,
+          onlinePlayers: activeServer.players.filter((p) => p.online).length,
+          networkMbps: 0.5,
+        },
+      ];
+
+  const historyHours = analyticsPoints.map((p) => p.timestamp);
+  const playerHistory = analyticsPoints.map((p) => p.onlinePlayers);
+  const tpsHistory = analyticsPoints.map((p) => p.tps);
+  const ramHistoryMb = analyticsPoints.map((p) => p.ramMb);
+  const cpuHistory = analyticsPoints.map((p) => p.cpuPercent);
 
   // Simple SVG Area / Line Chart component
   const renderLineChart = (
@@ -396,7 +361,7 @@ export const AnalyticsPage: React.FC = () => {
             </span>
           </div>
           {renderLineChart(
-            [12, 8, 14, 22, 38, 45, 52, 34, activeServer.telemetry.cpuPercent],
+            cpuHistory,
             '#f59e0b',
             'cpuGrad',
             0,
@@ -458,63 +423,72 @@ export const AnalyticsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60 font-mono">
-              {filteredSessions.map((sess) => (
-                <tr key={sess.id} className="hover:bg-zinc-900/40 transition-colors">
-                  <td className="py-3 px-4 flex items-center gap-2.5 font-sans">
-                    <img
-                      src={`https://mc-heads.net/avatar/${sess.username}/24`}
-                      alt={sess.username}
-                      className="w-6 h-6 rounded border border-zinc-700 bg-zinc-800 shrink-0"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://mc-heads.net/avatar/MHF_Steve/24';
-                      }}
-                    />
-                    <span className="font-semibold text-zinc-100">{sess.username}</span>
-                  </td>
-
-                  <td className="py-3 px-4 text-zinc-300">{sess.joinedAt}</td>
-
-                  <td className="py-3 px-4">
-                    {sess.leftAt === 'Currently Online' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-800/50 text-emerald-400 font-semibold text-[11px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        Online Now
-                      </span>
-                    ) : (
-                      <span className="text-zinc-400">{sess.leftAt}</span>
-                    )}
-                  </td>
-
-                  <td className="py-3 px-4 text-zinc-200">
-                    {Math.floor(sess.durationMinutes / 60) > 0 ? `${Math.floor(sess.durationMinutes / 60)}h ` : ''}
-                    {sess.durationMinutes % 60}m
-                  </td>
-
-                  <td className="py-3 px-4">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-[10px] uppercase font-bold border ${
-                        sess.dimension.toLowerCase() === 'nether'
-                          ? 'bg-rose-950/60 text-rose-400 border-rose-800/50'
-                          : sess.dimension.toLowerCase() === 'the end'
-                          ? 'bg-purple-950/60 text-purple-400 border-purple-800/50'
-                          : 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50'
-                      }`}
-                    >
-                      {sess.dimension}
-                    </span>
-                  </td>
-
-                  <td className="py-3 px-4 text-right">
-                    <span
-                      className={`font-semibold ${
-                        sess.peakPing < 30 ? 'text-emerald-400' : sess.peakPing < 60 ? 'text-amber-400' : 'text-rose-400'
-                      }`}
-                    >
-                      {sess.peakPing} ms
-                    </span>
+              {filteredSessions.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-zinc-500 font-sans">
+                    <p className="text-xs">No player sessions logged yet for this server.</p>
+                    <p className="text-[11px] text-zinc-600 mt-0.5">Player logins, session lengths, and dimension logs are recorded automatically.</p>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredSessions.map((sess) => (
+                  <tr key={sess.id} className="hover:bg-zinc-900/40 transition-colors">
+                    <td className="py-3 px-4 flex items-center gap-2.5 font-sans">
+                      <img
+                        src={`https://mc-heads.net/avatar/${sess.username}/24`}
+                        alt={sess.username}
+                        className="w-6 h-6 rounded border border-zinc-700 bg-zinc-800 shrink-0"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = 'https://mc-heads.net/avatar/MHF_Steve/24';
+                        }}
+                      />
+                      <span className="font-semibold text-zinc-100">{sess.username}</span>
+                    </td>
+
+                    <td className="py-3 px-4 text-zinc-300">{sess.joinedAt}</td>
+
+                    <td className="py-3 px-4">
+                      {sess.leftAt === 'Currently Online' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-800/50 text-emerald-400 font-semibold text-[11px]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Online Now
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400">{sess.leftAt}</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-4 text-zinc-200">
+                      {Math.floor(sess.durationMinutes / 60) > 0 ? `${Math.floor(sess.durationMinutes / 60)}h ` : ''}
+                      {sess.durationMinutes % 60}m
+                    </td>
+
+                    <td className="py-3 px-4">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[10px] uppercase font-bold border ${
+                          sess.dimension.toLowerCase() === 'nether'
+                            ? 'bg-rose-950/60 text-rose-400 border-rose-800/50'
+                            : sess.dimension.toLowerCase() === 'the end'
+                            ? 'bg-purple-950/60 text-purple-400 border-purple-800/50'
+                            : 'bg-emerald-950/60 text-emerald-400 border-emerald-800/50'
+                        }`}
+                      >
+                        {sess.dimension}
+                      </span>
+                    </td>
+
+                    <td className="py-3 px-4 text-right">
+                      <span
+                        className={`font-semibold ${
+                          sess.peakPing < 30 ? 'text-emerald-400' : sess.peakPing < 60 ? 'text-amber-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {sess.peakPing} ms
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

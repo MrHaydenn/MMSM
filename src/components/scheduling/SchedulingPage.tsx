@@ -41,7 +41,7 @@ export const SchedulingPage: React.FC = () => {
   const [newTaskType, setNewTaskType] = useState<ScheduledTask['type']>('backup');
   const [scheduleMode, setScheduleMode] = useState<'interval' | 'daily_time' | 'preset'>('interval');
   const [intervalNumber, setIntervalNumber] = useState<number>(6);
-  const [intervalUnit, setIntervalUnit] = useState<'hours' | 'days' | 'minutes' | 'weeks'>('hours');
+  const [intervalUnit, setIntervalUnit] = useState<'minutes' | 'hours' | 'days' | 'weeks' | 'months' | 'years'>('hours');
   const [dailyTime, setDailyTime] = useState('04:00 AM');
   const [newTaskInterval, setNewTaskInterval] = useState('Every 6 Hours');
   const [newTaskCommand, setNewTaskCommand] = useState('save-all');
@@ -58,7 +58,7 @@ export const SchedulingPage: React.FC = () => {
   const computeIntervalString = (
     mode: 'interval' | 'daily_time' | 'preset',
     num: number,
-    unit: 'hours' | 'days' | 'minutes' | 'weeks',
+    unit: 'minutes' | 'hours' | 'days' | 'weeks' | 'months' | 'years',
     time: string
   ) => {
     if (mode === 'daily_time') {
@@ -514,7 +514,7 @@ export const SchedulingPage: React.FC = () => {
                         <input
                           type="number"
                           min="1"
-                          max="99"
+                          max="9999"
                           value={intervalNumber}
                           onChange={(e) => {
                             const val = Math.max(1, Number(e.target.value) || 1);
@@ -530,7 +530,7 @@ export const SchedulingPage: React.FC = () => {
                         <select
                           value={intervalUnit}
                           onChange={(e) => {
-                            const unit = e.target.value as 'hours' | 'days' | 'minutes' | 'weeks';
+                            const unit = e.target.value as 'minutes' | 'hours' | 'days' | 'weeks' | 'months' | 'years';
                             setIntervalUnit(unit);
                             setNewTaskInterval(computeIntervalString('interval', intervalNumber, unit, dailyTime));
                           }}
@@ -540,9 +540,15 @@ export const SchedulingPage: React.FC = () => {
                           <option value="hours">Hours</option>
                           <option value="days">Days</option>
                           <option value="weeks">Weeks</option>
+                          <option value="months">Months</option>
+                          <option value="years">Years</option>
                         </select>
                       </div>
                     </div>
+
+                    <p className="text-[10px] text-zinc-500">
+                      💡 Tip: For annual backups, enter <span className="text-zinc-300 font-mono">1 Year</span> or <span className="text-zinc-300 font-mono">365 Days</span>. The countdown will be saved to disk.
+                    </p>
                   </div>
                 )}
 
@@ -585,10 +591,23 @@ export const SchedulingPage: React.FC = () => {
                       <option value="Daily at 04:00 AM">Daily at 04:00 AM</option>
                       <option value="Daily at 02:00 AM">Daily at 02:00 AM</option>
                       <option value="Every 2 Days">Every 2 Days</option>
-                      <option value="Weekly on Sunday">Weekly on Sunday</option>
+                      <option value="Every 7 Days">Every 7 Days (Weekly)</option>
+                      <option value="Every 30 Days">Every 30 Days (Monthly)</option>
+                      <option value="Every 365 Days">Every 365 Days (Annually / Yearly)</option>
                     </select>
                   </div>
                 )}
+
+                {/* Disk Persistence Guarantee Info */}
+                <div className="p-2.5 bg-emerald-950/30 border border-emerald-800/40 rounded-lg space-y-1 text-[11px]">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Reboot & Crash Resilient Timer</span>
+                  </div>
+                  <p className="text-zinc-400 leading-tight text-[10px]">
+                    Timer state is preserved as an absolute target timestamp in persistent storage. If MMSM or your computer restarts, the timer never resets to zero; it continues counting down or triggers an immediate catch-up backup if the time passed.
+                  </p>
+                </div>
 
                 <div className="pt-1 flex items-center justify-between text-[11px] font-mono text-zinc-400 border-t border-zinc-800/80">
                   <span>Effective Timing:</span>

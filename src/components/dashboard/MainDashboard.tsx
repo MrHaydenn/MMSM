@@ -59,6 +59,8 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
   const [archiveModalServer, setArchiveModalServer] = useState<MinecraftServer | null>(null);
   const [editingIpServer, setEditingIpServer] = useState<MinecraftServer | null>(null);
   const [customIpInput, setCustomIpInput] = useState('');
+  const [customPortInput, setCustomPortInput] = useState('');
+  const [hidePortInput, setHidePortInput] = useState(false);
   const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'7d' | '30d'>('30d');
 
   // Filter out archived servers
@@ -103,7 +105,8 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
   const handleCopyIp = (srv: MinecraftServer, e: React.MouseEvent) => {
     e.stopPropagation();
     const effectiveIp = srv.publicServerIp || wrapperSettings.publicIp || 'localhost';
-    const connectionAddress = `${effectiveIp}:${srv.port}`;
+    const effectivePort = srv.publicServerPort !== undefined && srv.publicServerPort !== '' ? srv.publicServerPort : srv.port;
+    const connectionAddress = srv.hidePublicPort ? effectiveIp : `${effectiveIp}:${effectivePort}`;
     navigator.clipboard.writeText(connectionAddress);
     setCopiedIpServerId(srv.id);
     setTimeout(() => setCopiedIpServerId(null), 2500);
@@ -313,7 +316,8 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
             const ramMax = (srv.allocatedRamMb / 1024).toFixed(1);
 
             const effectiveIp = srv.publicServerIp || wrapperSettings.publicIp || 'localhost';
-            const serverAddress = `${effectiveIp}:${srv.port}`;
+            const effectivePort = srv.publicServerPort !== undefined && srv.publicServerPort !== '' ? srv.publicServerPort : srv.port;
+            const serverAddress = srv.hidePublicPort ? effectiveIp : `${effectiveIp}:${effectivePort}`;
             const isOnline = srv.status === 'online';
 
             return (
@@ -375,9 +379,11 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                           e.stopPropagation();
                           setEditingIpServer(srv);
                           setCustomIpInput(srv.publicServerIp || '');
+                          setCustomPortInput(srv.publicServerPort !== undefined ? String(srv.publicServerPort) : '');
+                          setHidePortInput(!!srv.hidePublicPort);
                         }}
                         className="p-1 text-zinc-400 hover:text-emerald-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
-                        title="Edit custom join domain/IP for this server"
+                        title="Edit custom join domain/IP and display port for this server"
                       >
                         <Pencil className="w-3 h-3" />
                       </button>
@@ -696,7 +702,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="space-y-1.5 text-xs">
                 <label className="text-zinc-300 font-semibold block">Custom Public Domain / Hostname</label>
                 <input
@@ -708,15 +714,51 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                 />
               </div>
 
-              <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800 space-y-1 text-xs text-zinc-400">
-                <p className="text-[11px]">
-                  <strong>Current Effective Address:</strong>{' '}
-                  <span className="text-emerald-400 font-mono font-bold">
-                    {customIpInput.trim() || wrapperSettings.publicIp || 'localhost'}:{editingIpServer.port}
+              {/* Display Port Options */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="space-y-1.5">
+                  <label className="text-zinc-300 font-semibold block flex items-center justify-between">
+                    <span>Display Port Override</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">Optional</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={`e.g. 25565 or leave blank`}
+                    value={customPortInput}
+                    onChange={(e) => setCustomPortInput(e.target.value)}
+                    disabled={hidePortInput}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 font-mono focus:outline-none focus:border-emerald-500 text-xs disabled:opacity-40"
+                  />
+                </div>
+
+                <div className="space-y-1.5 flex flex-col justify-end">
+                  <label className="flex items-center gap-2 p-2 bg-zinc-900/90 border border-zinc-800 rounded-xl cursor-pointer hover:bg-zinc-900 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={hidePortInput}
+                      onChange={(e) => setHidePortInput(e.target.checked)}
+                      className="accent-emerald-500 rounded w-4 h-4 cursor-pointer"
+                    />
+                    <div className="text-[11px] leading-tight">
+                      <span className="font-semibold text-zinc-200 block">Hide Port Completely</span>
+                      <span className="text-zinc-500 text-[10px]">For SRV records / clean domains</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Live Preview Card */}
+              <div className="p-3.5 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-1.5 text-xs text-zinc-400">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-zinc-400">Card Connection Badge Preview:</span>
+                  <span className="text-emerald-400 font-mono font-bold text-xs bg-zinc-950 px-2.5 py-1 rounded-lg border border-zinc-800">
+                    {hidePortInput
+                      ? (customIpInput.trim() || wrapperSettings.publicIp || 'localhost')
+                      : `${customIpInput.trim() || wrapperSettings.publicIp || 'localhost'}:${customPortInput.trim() || editingIpServer.port}`}
                   </span>
-                </p>
+                </div>
                 <p className="text-[10px] text-zinc-500">
-                  Default global wrapper IP: <code className="text-zinc-300 font-mono">{wrapperSettings.publicIp || 'localhost'}</code>. If left empty, this server automatically inherits the default wrapper IP.
+                  The actual server JVM will continue listening on port <strong className="text-zinc-300 font-mono">:{editingIpServer.port}</strong>. This custom domain and display port are purely visual for your players.
                 </p>
               </div>
             </div>
@@ -726,6 +768,8 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                 type="button"
                 onClick={() => {
                   setCustomIpInput('');
+                  setCustomPortInput('');
+                  setHidePortInput(false);
                 }}
                 className="text-[11px] text-zinc-400 hover:text-zinc-200 cursor-pointer underline"
               >
@@ -743,7 +787,12 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setServerPublicIp(editingIpServer.id, customIpInput.trim() || undefined);
+                    setServerPublicIp(
+                      editingIpServer.id,
+                      customIpInput.trim() || undefined,
+                      customPortInput.trim() || undefined,
+                      hidePortInput
+                    );
                     setEditingIpServer(null);
                   }}
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-950/40 cursor-pointer transition-colors"

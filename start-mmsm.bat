@@ -1,126 +1,153 @@
 @echo off
-setlocal enabledelayedexpansion
-title MMSM - Minecraft Server Manager Wrapper
+title MMSM - Minecraft Server Manager Launcher
 color 0A
-cls
 
-:: Anchor execution directory to the script's exact folder
+:: Ensure the command prompt window STAYS OPEN on any error
+set "EXIT_PAUSE=1"
+
+echo ======================================================================
+echo    MMSM - MrHaydenn's Minecraft Server Manager Wrapper
+echo                  Windows 11 Startup Launcher
+echo ======================================================================
+echo.
+
+:: 1. Anchor working directory to script location
 cd /d "%~dp0"
-
-echo ======================================================================
-echo   MMSM - MrHaydenn's Minecraft Server Manager Wrapper
-echo ======================================================================
-echo.
-echo Current Directory: %~dp0
+echo [1/4] Checking launch directory...
+echo       Running from: "%~dp0"
 echo.
 
-:: 1. CHECK IF PROJECT FILES EXIST IN THIS FOLDER
-if not exist "%~dp0package.json" (
+:: 2. Locate package.json (check current folder, subfolders, or parent)
+set "APP_DIR=%~dp0"
+if exist "%~dp0package.json" (
+    set "APP_DIR=%~dp0"
+    goto FOUND_PACKAGE
+)
+if exist "%~dp0MMSM-main\package.json" (
+    set "APP_DIR=%~dp0MMSM-main"
+    cd /d "%~dp0MMSM-main"
+    echo [+] Found project files inside nested MMSM-main folder.
+    goto FOUND_PACKAGE
+)
+if exist "%~dp0..\package.json" (
+    set "APP_DIR=%~dp0..\"
+    cd /d "%~dp0..\"
+    echo [+] Found project files in parent folder.
+    goto FOUND_PACKAGE
+)
+
+:FOUND_PACKAGE
+if not exist "%APP_DIR%package.json" (
     color 0C
     echo ======================================================================
-    echo [ERROR] Project files not found in this folder!
-    echo ======================================================================
-    echo.
-    echo It looks like you ran start-mmsm.bat from:
+    echo [ERROR] "package.json" not found in:
     echo   "%~dp0"
-    echo.
-    echo But "package.json" was not found here.
-    echo.
-    echo SOLUTION:
-    echo 1. Make sure you extracted / copied all MMSM project files into a folder.
-    echo 2. Place this "start-mmsm.bat" file inside that same folder (next to package.json).
-    echo 3. Double-click start-mmsm.bat again.
-    echo.
     echo ======================================================================
+    echo.
+    echo Please make sure all extracted project files (src, package.json, vite.config.ts)
+    echo are in the same folder as this start-mmsm.bat script.
+    echo.
+    echo Press any key to close this window...
     pause
     exit /b 1
 )
 
-:: 2. DETECT NODE.JS & CHECK COMMON INSTALL PATHS
-set "NODE_CMD="
+:: 3. Find Node.js (Check standard PATH and common Windows 11 install locations)
+echo [2/4] Detecting Node.js runtime...
 
+set "NODE_EXE="
 where node >nul 2>nul
 if %errorlevel% equ 0 (
-    set "NODE_CMD=node"
-) else (
-    if exist "%ProgramFiles%\nodejs\node.exe" (
-        set "PATH=%ProgramFiles%\nodejs;%PATH%"
-        set "NODE_CMD=%ProgramFiles%\nodejs\node.exe"
-    ) else if exist "%ProgramFiles(x86)%\nodejs\node.exe" (
-        set "PATH=%ProgramFiles(x86)%\nodejs;%PATH%"
-        set "NODE_CMD=%ProgramFiles(x86)%\nodejs\node.exe"
+    set "NODE_EXE=node"
+)
+
+if "%NODE_EXE%"=="" (
+    if exist "C:\Program Files\nodejs\node.exe" (
+        set "PATH=C:\Program Files\nodejs;%PATH%"
+        set "NODE_EXE=C:\Program Files\nodejs\node.exe"
+    ) else if exist "C:\Program Files (x86)\nodejs\node.exe" (
+        set "PATH=C:\Program Files (x86)\nodejs;%PATH%"
+        set "NODE_EXE=C:\Program Files (x86)\nodejs\node.exe"
     ) else if exist "%LOCALAPPDATA%\Programs\nodejs\node.exe" (
         set "PATH=%LOCALAPPDATA%\Programs\nodejs;%PATH%"
-        set "NODE_CMD=%LOCALAPPDATA%\Programs\nodejs\node.exe"
+        set "NODE_EXE=%LOCALAPPDATA%\Programs\nodejs\node.exe"
+    ) else if exist "%APPDATA%\npm\node.exe" (
+        set "PATH=%APPDATA%\npm;%PATH%"
+        set "NODE_EXE=%APPDATA%\npm\node.exe"
     )
 )
 
-if "%NODE_CMD%"=="" (
+if "%NODE_EXE%"=="" (
     color 0C
     echo ======================================================================
-    echo [ERROR] Node.js is NOT installed or not recognized!
+    echo [ERROR] Node.js was not detected on this computer!
     echo ======================================================================
     echo.
-    echo MMSM requires Node.js (v18 or newer) to run the management wrapper.
+    echo MMSM requires Node.js (v18 or newer) to host the server manager WebGUI.
     echo.
-    echo Steps to resolve:
-    echo 1. Go to https://nodejs.org/ and download the "LTS" installer.
-    echo 2. Run the installer and ensure "Add to PATH" is checked.
-    echo 3. Restart your computer or restart this terminal window.
+    echo If you just installed Node.js:
+    echo   1. Windows may need to restart Explorer / your PC to refresh the PATH.
+    echo   2. Or run this script from inside a newly opened Command Prompt.
     echo.
-    echo ======================================================================
+    echo Download link: https://nodejs.org/ (Download the "LTS" version)
+    echo.
+    echo Press any key to open the Node.js download page and close...
     pause
+    start https://nodejs.org/en/download
     exit /b 1
 )
 
-for /f "tokens=*" %%i in ('node -v 2^>nul') do set "NODE_VERSION=%%i"
-for /f "tokens=*" %%i in ('npm -v 2^>nul') do set "NPM_VERSION=%%i"
-
-echo [+] Node.js detected: %NODE_VERSION%
-echo [+] NPM detected:     %NPM_VERSION%
+echo [+] Node.js is ready!
+for /f "tokens=*" %%v in ('node -v 2^>nul') do echo     Node Version: %%v
+for /f "tokens=*" %%v in ('npm -v 2^>nul') do echo     NPM Version:  %%v
 echo.
 
-:: 3. INSTALL DEPENDENCIES IF NEEDED
-if not exist "%~dp0node_modules\" (
-    echo [MMSM] First-time setup: Installing required dependencies...
-    echo Please wait, this may take 30-60 seconds...
+:: 4. Check & Install Dependencies
+echo [3/4] Verifying node_modules dependencies...
+if not exist "%APP_DIR%node_modules" (
+    echo [MMSM] Dependencies not found. Installing node_modules (first run setup)...
+    echo        Please wait while npm installs packages...
     echo.
     call npm install
-    if !errorlevel! neq 0 (
+    if errorlevel 1 (
         color 0C
         echo.
-        echo [ERROR] Dependency installation failed! Please check above output.
+        echo ======================================================================
+        echo [ERROR] "npm install" encountered an issue.
+        echo ======================================================================
         pause
         exit /b 1
     )
     echo.
-    echo [+] Dependencies installed successfully!
-    echo.
+    echo [+] Dependencies installed successfully.
 ) else (
-    echo [+] Dependencies verified (node_modules present).
+    echo [+] Dependencies already installed.
 )
+echo.
 
-:: 4. START DEV SERVER & BROWSER
+:: 5. Launch MMSM Server & WebGUI
+echo [4/4] Starting MMSM Server Wrapper...
 echo ======================================================================
-echo   Starting MMSM WebGUI Dashboard on http://localhost:3000
+echo   MMSM is starting on http://localhost:3000
+echo   Keep this Command Prompt window open while managing servers.
+echo   To stop the wrapper, press Ctrl+C in this window.
 echo ======================================================================
 echo.
-echo Launching default browser in 2 seconds...
+
+:: Open browser after 2 second delay
 start "" cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:3000"
 
-echo Running MMSM server... (Press Ctrl+C to stop)
-echo.
-
+:: Start Vite dev server
 call npm run dev
 
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     color 0C
     echo.
     echo ======================================================================
-    echo [NOTICE] Server process exited with code %errorlevel%.
+    echo [NOTICE] MMSM dev server stopped with exit code %errorlevel%.
     echo ======================================================================
 )
 
 echo.
 echo Press any key to exit...
-pause >nul
+pause

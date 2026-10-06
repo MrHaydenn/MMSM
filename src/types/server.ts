@@ -52,13 +52,17 @@ export interface ScheduledTask {
   id: string;
   name: string;
   type: 'backup' | 'restart' | 'command' | 'broadcast' | 'sleep';
-  cronOrInterval: string; // e.g. "Every 6 Hours", "Daily at 04:00 AM", "Every 30 Minutes"
+  cronOrInterval: string; // e.g. "Every 6 Hours", "Daily at 04:00 AM", "Every 30 Minutes", "Every 365 Days"
   command?: string;
   backupRuleId?: string;
   backupRuleName?: string;
   enabled: boolean;
   lastRun?: string;
   nextRun?: string;
+  lastRunTimestamp?: number; // Persisted Epoch ms of last execution
+  nextRunTimestamp?: number; // Persisted Epoch ms of scheduled next execution
+  intervalDurationMs?: number; // Exact duration in ms for long-term calculations
+  catchUpMissedRuns?: boolean; // Automatically run on startup if missed while offline
 }
 
 export interface PlayerSessionRecord {
@@ -212,6 +216,8 @@ export interface MinecraftServer {
   javaVersion: string;    // 'Java 21', 'Java 17', 'Java 8'
   port: number;
   publicServerIp?: string; // Optional custom public connect IP/domain override for this server
+  publicServerPort?: number | string; // Optional custom display port override (e.g. 25565)
+  hidePublicPort?: boolean; // When true, hides the port on the card badge (e.g. for SRV records / custom domains)
   serverIconUrl?: string; // Custom 64x64 server-icon.png
   properties: ServerProperties;
   mods: InstalledMod[];

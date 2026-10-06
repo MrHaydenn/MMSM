@@ -45,7 +45,12 @@ interface ServerContextType {
   updateBackupRule: (serverId: string, ruleId: string, updates: Partial<BackupRule>) => void;
   deleteBackupRule: (serverId: string, ruleId: string) => void;
   runBackupRule: (serverId: string, ruleId: string) => Promise<BackupRecord>;
-  setServerPublicIp: (serverId: string, publicIp?: string) => void;
+  setServerPublicIp: (
+    serverId: string,
+    publicIp?: string,
+    publicPort?: number | string,
+    hidePort?: boolean
+  ) => void;
   // Players
   kickPlayer: (serverId: string, username: string, reason?: string) => void;
   banPlayer: (serverId: string, username: string, reason?: string) => void;
@@ -957,6 +962,118 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
+  // Helper to parse interval in ms for any interval string (e.g. "Every 365 Days", "Every 1 Year", "Every 4 Hours")
+  const parseIntervalDurationMs = (intervalStr: string): number => {
+    const lower = intervalStr.toLowerCase();
+    const numMatch = lower.match(/\d+/);
+    const num = numMatch ? parseInt(numMatch[0], 10) : 1;
+
+    if (lower.includes('minute')) return num * 60 * 1000;
+    if (lower.includes('hour')) return num * 60 * 60 * 1000;
+    if (lower.includes('day')) return num * 24 * 60 * 60 * 1000;
+    if (lower.includes('week')) return num * 7 * 24 * 60 * 60 * 1000;
+    if (lower.includes('month')) return num * 30 * 24 * 60 * 60 * 1000;
+    if (lower.includes('year')) return num * 365 * 24 * 60 * 60 * 1000;
+    return 6 * 60 * 60 * 1000; // default 6h
+  };
+
+  // Persistent long-term scheduler ticker (survives app reboots, computer shutdowns, and power cycles)
+  useEffect(() => {
+    const checkScheduledTasks = () => {
+      const now = Date.now();
+      setServers((prevServers) => {
+        let hasAnyTaskUpdates = false;
+
+        const updatedServers = prevServers.map((srv) => {
+          if (srv.isArchived || !srv.scheduledTasks || srv.scheduledTasks.length === 0) return srv;
+
+          let srvTaskChanged = false;
+          const updatedTasks = srv.scheduledTasks.map((task) => {
+            if (!task.enabled) return task;
+
+            const durationMs = task.intervalDurationMs || parseIntervalDurationMs(task.cronOrInterval);
+            let nextTimestamp = task.nextRunTimestamp;
+
+            // Initialize next run timestamp if missing
+            if (!nextTimestamp) {
+              nextTimestamp = now + durationMs;
+              srvTaskChanged = true;
+              return {
+                ...task,
+                intervalDurationMs: durationMs,
+                nextRunTimestamp: nextTimestamp,
+                nextRun: new Date(nextTimestamp).toLocaleString([], {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              };
+            }
+
+            // Check if due (even if offline for 6 months or 1 year)
+            if (now >= nextTimestamp) {
+              srvTaskChanged = true;
+              hasAnyTaskUpdates = true;
+
+              // Execute action asynchronously
+              if (task.type === 'backup') {
+                if (task.backupRuleId) {
+                  runBackupRule(srv.id, task.backupRuleId).catch(() => {});
+                } else {
+                  createBackup(
+                    srv.id,
+                    `sched-${task.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+                    'scheduled'
+                  ).catch(() => {});
+                }
+              } else if (task.type === 'restart') {
+                restartServer(srv.id);
+              } else if (task.type === 'command' && task.command) {
+                executeCommand(task.command, srv.id);
+              } else if (task.type === 'sleep') {
+                putServerToSleep(srv.id);
+              }
+
+              const newNextTimestamp = now + durationMs;
+              const formattedNext = new Date(newNextTimestamp).toLocaleString([], {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              });
+
+              return {
+                ...task,
+                lastRunTimestamp: now,
+                lastRun: 'Just now (Persisted Timer)',
+                nextRunTimestamp: newNextTimestamp,
+                nextRun: formattedNext,
+              };
+            }
+
+            return task;
+          });
+
+          if (srvTaskChanged) {
+            hasAnyTaskUpdates = true;
+            return { ...srv, scheduledTasks: updatedTasks };
+          }
+          return srv;
+        });
+
+        return hasAnyTaskUpdates ? updatedServers : prevServers;
+      });
+    };
+
+    // Run check immediately on mount and every 4 seconds
+    checkScheduledTasks();
+    const schedulerInterval = setInterval(checkScheduledTasks, 4000);
+    return () => clearInterval(schedulerInterval);
+  }, []);
+
   const addLog = (serverId: string, log: Omit<ServerLog, 'id'>) => {
     const newEntry: ServerLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -1749,9 +1866,23 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return newBackup;
   };
 
-  const setServerPublicIp = (serverId: string, publicIp?: string) => {
+  const setServerPublicIp = (
+    serverId: string,
+    publicIp?: string,
+    publicPort?: number | string,
+    hidePort?: boolean
+  ) => {
     setServers((prev) =>
-      prev.map((s) => (s.id === serverId ? { ...s, publicServerIp: publicIp ? publicIp.trim() : undefined } : s))
+      prev.map((s) =>
+        s.id === serverId
+          ? {
+              ...s,
+              publicServerIp: publicIp ? publicIp.trim() : undefined,
+              publicServerPort: publicPort !== undefined && publicPort !== '' ? publicPort : undefined,
+              hidePublicPort: !!hidePort,
+            }
+          : s
+      )
     );
   };
 

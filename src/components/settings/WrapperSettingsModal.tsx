@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Terminal,
   Download,
+  Upload,
   Copy,
   Check,
   Folder,
@@ -309,18 +310,6 @@ Read-Host "MMSM stopped. Press Enter to close"
           </button>
 
           <button
-            onClick={() => setActiveTab('launcher')}
-            className={`px-3.5 py-2 border-b-2 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
-              activeTab === 'launcher'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <Terminal className="w-3.5 h-3.5" />
-            <span>Windows 11 Launcher (.bat)</span>
-          </button>
-
-          <button
             onClick={() => setActiveTab('vault')}
             className={`px-3.5 py-2 border-b-2 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
               activeTab === 'vault'
@@ -526,27 +515,55 @@ Read-Host "MMSM stopped. Press Enter to close"
                   })}
                 </div>
 
-                {/* Custom Logo URL Override */}
-                <div className="pt-3 border-t border-zinc-800 space-y-1.5 text-xs">
+                {/* Custom Photo Upload */}
+                <div className="pt-3 border-t border-zinc-800 space-y-2 text-xs">
                   <label className="text-zinc-300 font-semibold flex items-center justify-between">
-                    <span>Custom Logo / Image URL</span>
-                    <span className="text-[10px] text-zinc-500 font-mono">Optional</span>
+                    <span>Custom Logo / Image Upload</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">JPG, PNG, SVG, WEBP</span>
                   </label>
-                  <input
-                    type="url"
-                    placeholder="https://example.com/my-custom-logo.png"
-                    value={wrapperSettings.customWrapperLogoUrl || ''}
-                    onChange={(e) => updateWrapperSettings({ customWrapperLogoUrl: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 font-mono text-xs focus:outline-none focus:border-emerald-500"
-                  />
-                  {wrapperSettings.customWrapperLogoUrl && (
-                    <button
-                      type="button"
-                      onClick={() => updateWrapperSettings({ customWrapperLogoUrl: '' })}
-                      className="text-[11px] text-rose-400 hover:underline cursor-pointer"
-                    >
-                      Clear custom image and revert to preset emblem
-                    </button>
+
+                  {wrapperSettings.customWrapperLogoUrl ? (
+                    <div className="flex items-center gap-3 p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
+                      <img
+                        src={wrapperSettings.customWrapperLogoUrl}
+                        alt="Custom Logo Preview"
+                        className="w-12 h-12 object-contain rounded-lg bg-zinc-900 border border-zinc-800 p-1"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-semibold text-zinc-200 block truncate">Custom Photo Active</span>
+                        <span className="text-[10px] text-emerald-400 font-mono">Applied to top-left emblem</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateWrapperSettings({ customWrapperLogoUrl: '' })}
+                        className="px-2.5 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/50 text-xs font-medium cursor-pointer transition-colors"
+                      >
+                        Remove Photo
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center p-4 bg-zinc-950 border-2 border-dashed border-zinc-800 hover:border-emerald-500/50 rounded-xl cursor-pointer transition-all group">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              if (typeof event.target?.result === 'string') {
+                                updateWrapperSettings({ customWrapperLogoUrl: event.target.result });
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                      <Upload className="w-5 h-5 text-zinc-500 group-hover:text-emerald-400 mb-1 transition-colors" />
+                      <span className="text-xs font-semibold text-zinc-300 group-hover:text-emerald-300">Click to Upload Photo</span>
+                      <span className="text-[10px] text-zinc-500 mt-0.5">or drag and drop your image file here</span>
+                    </label>
                   )}
                 </div>
               </div>
@@ -806,52 +823,21 @@ Read-Host "MMSM stopped. Press Enter to close"
                     {updateCheckNotice}
                   </div>
                 )}
-              </div>
-            </div>
-          )}
 
-          {/* TAB 6: LAUNCHER & WINDOWS 11 GUIDE */}
-          {activeTab === 'launcher' && (
-            <div className="space-y-6">
-              <div className="p-5 bg-zinc-900/90 rounded-2xl border border-zinc-800 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
-                      <Terminal className="w-4 h-4 text-emerald-400" />
-                      <span>Windows 11 Startup Launchers (.bat & .ps1)</span>
-                    </h3>
-                    <p className="text-xs text-zinc-400">
-                      Pre-configured launchers with peer-dependency protection & directory auto-detection.
-                    </p>
+                {/* GitHub Release Info Box */}
+                <div className="p-4 bg-zinc-950/60 border border-zinc-800/80 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                    <Sparkles className="w-4 h-4" />
+                    <span>How GitHub Auto-Updates Work</span>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleDownloadLauncher}
-                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Download start-mmsm.bat</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDownloadPs1}
-                      className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 border border-zinc-700 cursor-pointer"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Download start-mmsm.ps1</span>
-                    </button>
-                  </div>
+                  <p className="text-zinc-300 leading-relaxed">
+                    MMSM automatically queries the GitHub Releases API (<code className="text-emerald-400 font-mono text-[11px]">/repos/MrHaydenn/mmsm/releases/latest</code>).
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-zinc-400 text-[11px] pl-1">
+                    <li><strong className="text-zinc-200">Releases Required:</strong> To publish an update for users, create an official Release on GitHub with a tag like <code className="text-zinc-200 font-mono">v2.6.0</code>.</li>
+                    <li><strong className="text-zinc-200">Automated Installation:</strong> When an update is detected, clicking "Update Now" gracefully closes running Minecraft servers, downloads the latest release payload, applies file updates, and restarts your servers automatically.</li>
+                  </ul>
                 </div>
-              </div>
-
-              {/* Quick Launch Steps */}
-              <div className="p-4 bg-zinc-900/60 rounded-xl border border-zinc-800 space-y-2 text-xs text-zinc-300">
-                <p className="font-semibold text-zinc-100">Simple one-line terminal launch:</p>
-                <code className="block p-3 bg-zinc-950 rounded-lg text-emerald-400 font-mono text-xs border border-zinc-800 select-all">
-                  npm run dev
-                </code>
               </div>
             </div>
           )}

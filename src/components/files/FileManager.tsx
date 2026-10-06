@@ -51,6 +51,16 @@ export const FileManager: React.FC = () => {
   // Delete modal
   const [deletingFile, setDeletingFile] = useState<ServerFile | null>(null);
 
+  if (!activeServer) {
+    return (
+      <div className="p-8 text-center space-y-3">
+        <Folder className="w-12 h-12 text-zinc-600 mx-auto" />
+        <h2 className="text-base font-bold text-zinc-200">No Server Selected</h2>
+        <p className="text-xs text-zinc-400">Please select or create a Minecraft server to manage its files.</p>
+      </div>
+    );
+  }
+
   const files = activeServer.files || [];
 
   // Filter items in current directory
@@ -206,7 +216,7 @@ export const FileManager: React.FC = () => {
                 <span>Server File Manager & Config Editor</span>
               </h1>
               <p className="text-xs text-zinc-400">
-                Direct filesystem access for <strong className="text-zinc-200">{activeServer.name}</strong> · View, create, edit and delete config files
+                Direct filesystem access for <strong className="text-zinc-200">{activeServer.name}</strong> · Saved in <code className="px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-emerald-400 font-mono text-[11px]">/Servers/{activeServer.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/</code>
               </p>
             </div>
           </div>

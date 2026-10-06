@@ -51,8 +51,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { activeServer } = useServer();
   const { currentUser } = useAuth();
 
-  const modUpdatesCount = activeServer.mods.filter((m) => m.hasUpdate).length;
-  const whitelistRequestsCount = (activeServer.whitelistRequests || []).length;
+  const modUpdatesCount = activeServer?.mods ? activeServer.mods.filter((m) => m.hasUpdate).length : 0;
+  const whitelistRequestsCount = activeServer?.whitelistRequests ? activeServer.whitelistRequests.length : 0;
 
   const navItems = [
     {
@@ -75,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Resource Monitor',
       shortLabel: 'Monitor',
       icon: Activity,
-      badge: activeServer.status === 'online' ? `${activeServer.telemetry.tps}` : null,
+      badge: activeServer?.status === 'online' ? `${activeServer.telemetry.tps}` : null,
       badgeColor: 'bg-zinc-800 text-zinc-400 border-zinc-700',
     },
     {
@@ -90,7 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'File Manager',
       shortLabel: 'Files',
       icon: Folder,
-      badge: activeServer.files ? `${activeServer.files.length}` : null,
+      badge: activeServer?.files ? `${activeServer.files.length}` : null,
       badgeColor: 'bg-zinc-800 text-zinc-400 border-zinc-700',
     },
     {
@@ -101,8 +101,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge:
         whitelistRequestsCount > 0
           ? `${whitelistRequestsCount} req`
-          : activeServer.players.filter((p) => p.online).length > 0
-          ? `${activeServer.players.filter((p) => p.online).length}`
+          : (activeServer?.players || []).filter((p) => p.online).length > 0
+          ? `${(activeServer?.players || []).filter((p) => p.online).length}`
           : null,
       badgeColor:
         whitelistRequestsCount > 0
@@ -114,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Loader & Updates',
       shortLabel: 'Updates',
       icon: RefreshCw,
-      badge: activeServer.hasLoaderUpdate ? '!' : null,
+      badge: activeServer?.hasLoaderUpdate ? '!' : null,
       badgeColor: 'bg-amber-950/80 text-amber-400 border-amber-600/60 font-bold',
     },
     {

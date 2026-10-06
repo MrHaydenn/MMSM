@@ -658,115 +658,7 @@ const INITIAL_SERVERS: MinecraftServer[] = [
   },
 ];
 
-const INITIAL_LOGS: Record<string, ServerLog[]> = {
-  'srv-fabric-smp': [
-    {
-      id: 'log-1',
-      timestamp: '10:00:01',
-      level: 'INFO',
-      thread: 'main',
-      message: 'Loading Minecraft 1.21.4 with Fabric Loader 0.16.7',
-    },
-    {
-      id: 'log-2',
-      timestamp: '10:00:03',
-      level: 'INFO',
-      thread: 'main',
-      message: 'Loading 4 mods: chunky 1.4.28, fabric-api 0.110.1, ferritecore 7.0.0, lithium 0.14.7',
-    },
-    {
-      id: 'log-3',
-      timestamp: '10:00:07',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Starting minecraft server version 1.21.4',
-    },
-    {
-      id: 'log-4',
-      timestamp: '10:00:08',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Loading properties from server.properties',
-    },
-    {
-      id: 'log-5',
-      timestamp: '10:00:09',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Default game type: SURVIVAL',
-    },
-    {
-      id: 'log-6',
-      timestamp: '10:00:11',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Preparing level "world"',
-    },
-    {
-      id: 'log-7',
-      timestamp: '10:00:14',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Preparing start region for dimension minecraft:overworld',
-    },
-    {
-      id: 'log-8',
-      timestamp: '10:00:16',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Time elapsed: 5312 ms',
-    },
-    {
-      id: 'log-9',
-      timestamp: '10:00:16',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Done (14.282s)! For help, type "help"',
-    },
-    {
-      id: 'log-10',
-      timestamp: '10:02:40',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Notch[/192.168.1.102:54201] logged in with entity id 120 at (124.5, 71.0, -350.2)',
-    },
-    {
-      id: 'log-11',
-      timestamp: '10:02:40',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Notch joined the game',
-    },
-    {
-      id: 'log-12',
-      timestamp: '10:04:12',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'jeb_[/192.168.1.115:52310] logged in with entity id 144 at (-45.0, 64.0, 210.5)',
-    },
-    {
-      id: 'log-13',
-      timestamp: '10:04:12',
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'jeb_ joined the game',
-    },
-    {
-      id: 'log-14',
-      timestamp: '10:06:50',
-      level: 'CHAT',
-      thread: 'Async Chat',
-      message: '<Notch> Welcome everyone to the Fabric 1.21.4 server!',
-    },
-    {
-      id: 'log-15',
-      timestamp: '10:07:05',
-      level: 'CHAT',
-      thread: 'Async Chat',
-      message: '<jeb_> Chunky pregen worked great, smooth 20 TPS everywhere.',
-    },
-  ],
-};
+const INITIAL_LOGS: Record<string, ServerLog[]> = {};
 
 const ServerContext = createContext<ServerContextType | undefined>(undefined);
 
@@ -775,16 +667,17 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const saved = localStorage.getItem('crafty_servers');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
       } catch {
         // fallback
       }
     }
-    return INITIAL_SERVERS;
+    return [];
   });
 
   const [activeServerId, setActiveServerId] = useState<string>(() => {
-    return servers[0]?.id || 'srv-fabric-smp';
+    return servers[0]?.id || '';
   });
 
   const [serverLogs, setServerLogs] = useState<Record<string, ServerLog[]>>(() => {
@@ -808,55 +701,9 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     type: 'info' | 'update' | 'warning';
     targetTab?: 'updates' | 'mods' | 'players' | 'config' | 'backups';
     targetAction?: 'review_whitelist' | 'update_loader' | 'view_mod';
-  }[]>([
-    {
-      id: 'alert-1',
-      serverId: 'srv-fabric-smp',
-      title: 'Fabric Loader Update Available',
-      message: 'Fabric Loader 0.16.10 is available (current: 0.16.7). Includes chunk tick optimizations for 1.21.4.',
-      date: 'Today',
-      type: 'update',
-      targetTab: 'updates',
-      targetAction: 'update_loader',
-    },
-    {
-      id: 'alert-2',
-      serverId: 'srv-fabric-smp',
-      title: 'Unwhitelisted Player Join Attempt',
-      message: 'TechnoFan_99 (192.168.1.184) tried to connect to Survival Fabric SMP while whitelist is enforced.',
-      date: '5m ago',
-      type: 'warning',
-      targetTab: 'players',
-      targetAction: 'review_whitelist',
-    },
-    {
-      id: 'alert-3',
-      serverId: 'srv-fabric-smp',
-      title: 'Mod Update Available: FerriteCore',
-      message: 'FerriteCore has a compatible update on Modrinth for Fabric 1.21.4.',
-      date: 'Today',
-      type: 'update',
-      targetTab: 'mods',
-      targetAction: 'view_mod',
-    },
-  ]);
+  }[]>([]);
 
-  const [downloads, setDownloads] = useState<import('../types/server').DownloadItem[]>([
-    {
-      id: 'dl-seed-1',
-      serverId: 'srv-fabric-smp',
-      serverName: 'Survival Fabric SMP',
-      title: 'Fabric API',
-      filename: 'fabric-api-0.110.1+1.21.4.jar',
-      progressPercent: 100,
-      status: 'completed',
-      totalSizeBytes: 2450000,
-      speedMbps: 48.2,
-      type: 'mod',
-      startedAt: '10 mins ago',
-      completedAt: 'Just now',
-    },
-  ]);
+  const [downloads, setDownloads] = useState<import('../types/server').DownloadItem[]>([]);
 
   const addDownload = (
     item: Omit<import('../types/server').DownloadItem, 'id' | 'startedAt' | 'progressPercent'>
@@ -2702,8 +2549,8 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [updateProgressStep, setUpdateProgressStep] = useState<string>('');
 
   const checkForGitHubUpdate = async (): Promise<boolean> => {
-    // Simulate remote release query
-    await new Promise((res) => setTimeout(res, 800));
+    // Simulate or query remote release payload
+    await new Promise((res) => setTimeout(res, 600));
     const hasNewRelease = true;
     setWrapperSettings((prev) => ({
       ...prev,
@@ -2719,7 +2566,7 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setAlerts((prev) => [
         {
           id: `alert-update-${Date.now()}`,
-          serverId: activeServer.id,
+          serverId: activeServer?.id || 'wrapper',
           title: 'MMSM Launcher Update Available (v2.6.0)',
           message: 'A new version of MMSM is available on GitHub with automatic backup rules & core loader improvements.',
           date: 'Just now',

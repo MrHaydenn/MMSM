@@ -154,7 +154,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Server Picker Dropdown (when inside server view or for quick switch) */}
-        {isServerSelected && (
+        {isServerSelected && activeServer && (
           <div className="relative">
             <button
               onClick={() => setServerDropdownOpen(!serverDropdownOpen)}

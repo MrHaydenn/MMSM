@@ -166,7 +166,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title="Return to Main Dashboard"
         >
           <ArrowLeft className="w-3.5 h-3.5 text-emerald-400 group-hover:-translate-x-0.5 transition-transform shrink-0" />
-          <span className="truncate">Fleet Dashboard</span>
+          <span className="truncate">Dashboard</span>
         </button>
       </div>
 

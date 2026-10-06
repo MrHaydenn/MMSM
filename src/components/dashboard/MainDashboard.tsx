@@ -26,6 +26,7 @@ import {
   Calendar,
   AlertTriangle,
   X,
+  Pencil,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
@@ -41,11 +42,23 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
   onSelectServer,
   onOpenCreateModal,
 }) => {
-  const { servers, startServer, stopServer, restartServer, killServer, archiveServer, wakeServer, wrapperSettings } = useServer();
+  const {
+    servers,
+    startServer,
+    stopServer,
+    restartServer,
+    killServer,
+    archiveServer,
+    wakeServer,
+    wrapperSettings,
+    setServerPublicIp,
+  } = useServer();
   const { canPerformAction } = useAuth();
 
   const [copiedIpServerId, setCopiedIpServerId] = useState<string | null>(null);
   const [archiveModalServer, setArchiveModalServer] = useState<MinecraftServer | null>(null);
+  const [editingIpServer, setEditingIpServer] = useState<MinecraftServer | null>(null);
+  const [customIpInput, setCustomIpInput] = useState('');
   const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'7d' | '30d'>('30d');
 
   // Filter out archived servers
@@ -356,17 +369,30 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                       <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                       <span className="truncate">{serverAddress}</span>
                     </div>
-                    <button
-                      onClick={(e) => handleCopyIp(srv, e)}
-                      className="p-1 text-zinc-400 hover:text-white rounded hover:bg-zinc-800 transition-colors cursor-pointer shrink-0 ml-1.5"
-                      title="Copy connection IP:port"
-                    >
-                      {copiedIpServerId === srv.id ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
-                    </button>
+                    <div className="flex items-center gap-0.5 shrink-0 ml-1.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingIpServer(srv);
+                          setCustomIpInput(srv.publicServerIp || '');
+                        }}
+                        className="p-1 text-zinc-400 hover:text-emerald-400 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                        title="Edit custom join domain/IP for this server"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => handleCopyIp(srv, e)}
+                        className="p-1 text-zinc-400 hover:text-white rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                        title="Copy connection IP:port"
+                      >
+                        {copiedIpServerId === srv.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Telemetry Strip */}
@@ -647,6 +673,88 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* EDIT CUSTOM SERVER IP MODAL */}
+      {editingIpServer && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#11151c] border border-zinc-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 text-emerald-400">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-zinc-100">Server Connection Domain / IP</h3>
+                  <p className="text-xs text-zinc-400">{editingIpServer.name} · Port :{editingIpServer.port}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingIpServer(null)}
+                className="p-1 rounded-lg text-zinc-500 hover:text-zinc-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1.5 text-xs">
+                <label className="text-zinc-300 font-semibold block">Custom Public Domain / Hostname</label>
+                <input
+                  type="text"
+                  placeholder={`e.g. play.mydomain.com or leave blank to default`}
+                  value={customIpInput}
+                  onChange={(e) => setCustomIpInput(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-100 font-mono focus:outline-none focus:border-emerald-500 text-xs"
+                />
+              </div>
+
+              <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800 space-y-1 text-xs text-zinc-400">
+                <p className="text-[11px]">
+                  <strong>Current Effective Address:</strong>{' '}
+                  <span className="text-emerald-400 font-mono font-bold">
+                    {customIpInput.trim() || wrapperSettings.publicIp || 'localhost'}:{editingIpServer.port}
+                  </span>
+                </p>
+                <p className="text-[10px] text-zinc-500">
+                  Default global wrapper IP: <code className="text-zinc-300 font-mono">{wrapperSettings.publicIp || 'localhost'}</code>. If left empty, this server automatically inherits the default wrapper IP.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomIpInput('');
+                }}
+                className="text-[11px] text-zinc-400 hover:text-zinc-200 cursor-pointer underline"
+              >
+                Reset to Default
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingIpServer(null)}
+                  className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setServerPublicIp(editingIpServer.id, customIpInput.trim() || undefined);
+                    setEditingIpServer(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-950/40 cursor-pointer transition-colors"
+                >
+                  Save Connection Address
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CONFIRMATION MODAL FOR ARCHIVING SERVER */}
       {archiveModalServer && (

@@ -27,15 +27,78 @@ import { useAuth } from '../../context/AuthContext';
 import { BackupRecord, BackupRule } from '../../types/server';
 
 const AVAILABLE_BACKUP_TARGETS = [
-  { id: 'world', name: 'world/ (Overworld Dimension & Chunks)', size: '~110 MB', category: 'world' },
-  { id: 'world_nether', name: 'world_nether/ (Nether Dimension DIM-1)', size: '~32 MB', category: 'world' },
-  { id: 'world_the_end', name: 'world_the_end/ (The End Dimension DIM1)', size: '~18 MB', category: 'world' },
-  { id: 'mods', name: 'mods/ or plugins/ (Mod & Plugin JARs)', size: '~65 MB', category: 'addons' },
-  { id: 'config', name: 'config/ (Mod & Server configurations)', size: '~4.2 MB', category: 'config' },
-  { id: 'server.properties', name: 'server.properties (Network, MOTD, Difficulty)', size: '< 1 MB', category: 'config' },
-  { id: 'whitelist.json', name: 'whitelist.json & ops.json (Access control)', size: '< 1 MB', category: 'config' },
-  { id: 'usercache.json', name: 'usercache.json & banned-players.json', size: '< 1 MB', category: 'config' },
-  { id: 'logs', name: 'logs/ (Console history & crash reports)', size: '~12 MB', category: 'logs' },
+  {
+    id: 'world',
+    name: 'world/',
+    kind: 'folder' as const,
+    label: 'Overworld Dimension (Chunks, PlayerData, Stats, Entities, level.dat)',
+    size: '~110 MB',
+    category: 'world',
+  },
+  {
+    id: 'world_nether',
+    name: 'world_nether/ (DIM-1)',
+    kind: 'folder' as const,
+    label: 'Nether Dimension (Fortresses, Bastions, Nether Wastes)',
+    size: '~32 MB',
+    category: 'world',
+  },
+  {
+    id: 'world_the_end',
+    name: 'world_the_end/ (DIM1)',
+    kind: 'folder' as const,
+    label: 'The End Dimension (End Cities, Dragon Island chunks)',
+    size: '~18 MB',
+    category: 'world',
+  },
+  {
+    id: 'mods',
+    name: 'mods/ or plugins/',
+    kind: 'folder' as const,
+    label: 'Installed Mod JARs, Plugin packages & Loader Addons',
+    size: '~65 MB',
+    category: 'addons',
+  },
+  {
+    id: 'config',
+    name: 'config/',
+    kind: 'folder' as const,
+    label: 'Mod & Plugin configuration files (.json, .toml, .yml)',
+    size: '~4.2 MB',
+    category: 'config',
+  },
+  {
+    id: 'server.properties',
+    name: 'server.properties',
+    kind: 'file' as const,
+    label: 'Server Network Port, MOTD, Difficulty, Gamemode & Properties file',
+    size: '< 1 MB',
+    category: 'config',
+  },
+  {
+    id: 'whitelist.json',
+    name: 'whitelist.json & ops.json',
+    kind: 'file' as const,
+    label: 'Security Access Control, Admin Operators & Whitelist files',
+    size: '< 1 MB',
+    category: 'config',
+  },
+  {
+    id: 'usercache.json',
+    name: 'usercache.json & banned-players.json',
+    kind: 'file' as const,
+    label: 'UUID player cache, IP bans & player moderation history files',
+    size: '< 1 MB',
+    category: 'config',
+  },
+  {
+    id: 'logs',
+    name: 'logs/',
+    kind: 'folder' as const,
+    label: 'Historical console logs, debug telemetry & crash reports',
+    size: '~12 MB',
+    category: 'logs',
+  },
 ];
 
 export const BackupManager: React.FC = () => {
@@ -651,32 +714,56 @@ export const BackupManager: React.FC = () => {
               {/* Checkboxes for Server Files / Folders */}
               <div className="space-y-2 pt-1">
                 <label className="text-xs text-zinc-300 font-semibold block flex items-center justify-between">
-                  <span>Select Server Files to Include in ZIP</span>
+                  <span>Server Files & Directories Included in Archive</span>
                   <span className="text-[10px] text-emerald-400 font-mono">
-                    {ruleIncludedPaths.length} items checked
+                    {ruleIncludedPaths.length} of {AVAILABLE_BACKUP_TARGETS.length} targets selected
                   </span>
                 </label>
 
-                <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
+                <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2.5 space-y-2 max-h-56 overflow-y-auto">
                   {AVAILABLE_BACKUP_TARGETS.map((target) => {
                     const isChecked = ruleIncludedPaths.includes(target.id);
+                    const isFolder = target.kind === 'folder';
                     return (
                       <label
                         key={target.id}
-                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-xs font-mono ${
-                          isChecked ? 'bg-zinc-800/80 text-zinc-100 border border-emerald-500/40' : 'hover:bg-zinc-800/40 text-zinc-400 border border-transparent'
+                        className={`flex items-start justify-between p-2.5 rounded-lg cursor-pointer transition-colors text-xs ${
+                          isChecked
+                            ? 'bg-zinc-800/90 text-zinc-100 border border-emerald-500/50'
+                            : 'hover:bg-zinc-800/40 text-zinc-400 border border-transparent'
                         }`}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-start gap-2.5">
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => handleTogglePath(target.id)}
-                            className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                            className="w-4 h-4 accent-emerald-500 rounded cursor-pointer mt-0.5"
                           />
-                          <span className="font-medium text-zinc-200">{target.name}</span>
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              {isFolder ? (
+                                <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              ) : (
+                                <FileText className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                              )}
+                              <span className="font-mono font-bold text-zinc-200">{target.name}</span>
+                              <span
+                                className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold uppercase tracking-wider ${
+                                  isFolder
+                                    ? 'bg-amber-950/60 text-amber-300 border border-amber-800/40'
+                                    : 'bg-cyan-950/60 text-cyan-300 border border-cyan-800/40'
+                                }`}
+                              >
+                                {isFolder ? 'Folder / Directory' : 'Single File'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-zinc-400 leading-tight">{target.label}</p>
+                          </div>
                         </div>
-                        <span className="text-[10px] text-zinc-500">{target.size}</span>
+                        <span className="text-[10px] text-zinc-500 font-mono shrink-0 ml-2 mt-0.5">
+                          {target.size}
+                        </span>
                       </label>
                     );
                   })}

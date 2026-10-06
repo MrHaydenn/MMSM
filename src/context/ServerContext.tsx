@@ -45,7 +45,7 @@ interface ServerContextType {
   updateBackupRule: (serverId: string, ruleId: string, updates: Partial<BackupRule>) => void;
   deleteBackupRule: (serverId: string, ruleId: string) => void;
   runBackupRule: (serverId: string, ruleId: string) => Promise<BackupRecord>;
-  setServerPublicIp: (serverId: string, publicIp: string) => void;
+  setServerPublicIp: (serverId: string, publicIp?: string) => void;
   // Players
   kickPlayer: (serverId: string, username: string, reason?: string) => void;
   banPlayer: (serverId: string, username: string, reason?: string) => void;
@@ -1508,6 +1508,9 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     type: 'manual' | 'scheduled' = 'manual'
   ): Promise<BackupRecord> => {
     const srv = servers.find((s) => s.id === serverId);
+    if (!srv || srv.isArchived) {
+      throw new Error('Cannot create backup: Server is archived or does not exist.');
+    }
     const dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
     const name = customName || `backup-${srv?.name.toLowerCase().replace(/\s+/g, '-')}-${dateStr}`;
 
@@ -1679,6 +1682,9 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const runBackupRule = async (serverId: string, ruleId: string): Promise<BackupRecord> => {
     const srv = servers.find((s) => s.id === serverId);
+    if (!srv || srv.isArchived) {
+      throw new Error('Cannot execute backup rule: Server is archived or does not exist.');
+    }
     const rule = srv?.backupRules?.find((r) => r.id === ruleId);
     const ruleName = rule?.name || 'Manual Backup';
     const destPath = rule?.destinationPath || wrapperSettings.backupsDirectory || '/Backups';
@@ -1743,9 +1749,9 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return newBackup;
   };
 
-  const setServerPublicIp = (serverId: string, publicIp: string) => {
+  const setServerPublicIp = (serverId: string, publicIp?: string) => {
     setServers((prev) =>
-      prev.map((s) => (s.id === serverId ? { ...s, publicServerIp: publicIp.trim() || undefined } : s))
+      prev.map((s) => (s.id === serverId ? { ...s, publicServerIp: publicIp ? publicIp.trim() : undefined } : s))
     );
   };
 
@@ -2231,13 +2237,23 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       stopServer(serverId);
     }
     setServers((prev) =>
-      prev.map((s) => (s.id === serverId ? { ...s, isArchived: true, status: 'offline' } : s))
+      prev.map((s) =>
+        s.id === serverId
+          ? {
+              ...s,
+              isArchived: true,
+              status: 'offline',
+              backupSchedule: { ...s.backupSchedule, enabled: false },
+              scheduledTasks: (s.scheduledTasks || []).map((t) => ({ ...t, enabled: false })),
+            }
+          : s
+      )
     );
     addLog(serverId, {
       timestamp: getTimestamp(),
       level: 'INFO',
       thread: 'System',
-      message: `[Archive] Server "${srv?.name}" archived and preserved in vault.`,
+      message: `[Archive] Server "${srv?.name}" archived into vault. All automated backups and scheduled tasks have been paused.`,
     });
   };
 
@@ -2492,6 +2508,7 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const runScheduledTaskNow = (serverId: string, taskId: string) => {
     const srv = servers.find((s) => s.id === serverId);
+    if (!srv || srv.isArchived) return;
     const task = srv?.scheduledTasks?.find((t) => t.id === taskId);
     if (!task) return;
 

@@ -39,6 +39,10 @@ export const SchedulingPage: React.FC = () => {
   // Form state for creating a scheduled task
   const [newTaskName, setNewTaskName] = useState('');
   const [newTaskType, setNewTaskType] = useState<ScheduledTask['type']>('backup');
+  const [scheduleMode, setScheduleMode] = useState<'interval' | 'daily_time' | 'preset'>('interval');
+  const [intervalNumber, setIntervalNumber] = useState<number>(6);
+  const [intervalUnit, setIntervalUnit] = useState<'hours' | 'days' | 'minutes' | 'weeks'>('hours');
+  const [dailyTime, setDailyTime] = useState('04:00 AM');
   const [newTaskInterval, setNewTaskInterval] = useState('Every 6 Hours');
   const [newTaskCommand, setNewTaskCommand] = useState('save-all');
   const [selectedBackupRuleId, setSelectedBackupRuleId] = useState<string>(
@@ -50,6 +54,23 @@ export const SchedulingPage: React.FC = () => {
 
   const filteredTasks = tasks.filter((t) => (taskFilter === 'all' ? true : t.type === taskFilter));
 
+  // Compute effective interval string whenever inputs change
+  const computeIntervalString = (
+    mode: 'interval' | 'daily_time' | 'preset',
+    num: number,
+    unit: 'hours' | 'days' | 'minutes' | 'weeks',
+    time: string
+  ) => {
+    if (mode === 'daily_time') {
+      return `Daily at ${time}`;
+    }
+    if (mode === 'interval') {
+      const capUnit = unit.charAt(0).toUpperCase() + unit.slice(1);
+      return `Every ${num} ${num === 1 ? capUnit.replace(/s$/, '') : capUnit}`;
+    }
+    return newTaskInterval;
+  };
+
   const handleOpenCreateModal = () => {
     setNewTaskType('backup');
     const firstRule = backupRules[0];
@@ -59,6 +80,9 @@ export const SchedulingPage: React.FC = () => {
     } else {
       setNewTaskName('Auto-Backup Task');
     }
+    setScheduleMode('interval');
+    setIntervalNumber(6);
+    setIntervalUnit('hours');
     setNewTaskInterval('Every 6 Hours');
     setNewTaskCommand('save-all');
     setIsCreateModalOpen(true);
@@ -69,19 +93,33 @@ export const SchedulingPage: React.FC = () => {
     if (type === 'backup') {
       const rule = backupRules.find((r) => r.id === selectedBackupRuleId) || backupRules[0];
       setNewTaskName(rule ? `Auto-Backup: ${rule.name}` : 'Auto-Backup Task');
+      setScheduleMode('interval');
+      setIntervalNumber(6);
+      setIntervalUnit('hours');
+      setNewTaskInterval('Every 6 Hours');
     } else if (type === 'restart') {
       setNewTaskName('Daily Graceful Server Restart');
+      setScheduleMode('daily_time');
+      setDailyTime('04:00 AM');
       setNewTaskInterval('Daily at 04:00 AM');
     } else if (type === 'command') {
       setNewTaskName('Periodic World Save (/save-all)');
       setNewTaskCommand('save-all');
+      setScheduleMode('interval');
+      setIntervalNumber(30);
+      setIntervalUnit('minutes');
       setNewTaskInterval('Every 30 Minutes');
     } else if (type === 'broadcast') {
       setNewTaskName('Server Rules Announcement');
       setNewTaskCommand('say §6[Server] §eDon\'t forget to join our Discord!');
+      setScheduleMode('interval');
+      setIntervalNumber(1);
+      setIntervalUnit('hours');
       setNewTaskInterval('Every 1 Hour');
     } else if (type === 'sleep') {
       setNewTaskName('Nightly Power Saver Standby');
+      setScheduleMode('daily_time');
+      setDailyTime('02:00 AM');
       setNewTaskInterval('Daily at 02:00 AM');
     }
   };
@@ -421,22 +459,141 @@ export const SchedulingPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Interval / Frequency */}
-              <div className="space-y-1.5">
-                <label className="text-xs text-zinc-300 font-semibold block">Run Frequency / Schedule</label>
-                <select
-                  value={newTaskInterval}
-                  onChange={(e) => setNewTaskInterval(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="Every 30 Minutes">Every 30 Minutes</option>
-                  <option value="Every 1 Hour">Every 1 Hour</option>
-                  <option value="Every 6 Hours">Every 6 Hours</option>
-                  <option value="Every 12 Hours">Every 12 Hours</option>
-                  <option value="Daily at 04:00 AM">Daily at 04:00 AM</option>
-                  <option value="Daily at 02:00 AM">Daily at 02:00 AM</option>
-                  <option value="Weekly on Sunday">Weekly on Sunday</option>
-                </select>
+              {/* Custom Interval / Frequency Selection */}
+              <div className="space-y-2 p-3 bg-zinc-900/80 rounded-xl border border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-zinc-300 font-semibold block">Execution Schedule & Timing</label>
+                  <div className="flex items-center gap-1 bg-zinc-950 p-0.5 rounded-lg border border-zinc-800 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScheduleMode('interval');
+                        setNewTaskInterval(computeIntervalString('interval', intervalNumber, intervalUnit, dailyTime));
+                      }}
+                      className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                        scheduleMode === 'interval'
+                          ? 'bg-zinc-800 text-emerald-400 font-bold'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      Every X Time
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScheduleMode('daily_time');
+                        setNewTaskInterval(computeIntervalString('daily_time', intervalNumber, intervalUnit, dailyTime));
+                      }}
+                      className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                        scheduleMode === 'daily_time'
+                          ? 'bg-zinc-800 text-emerald-400 font-bold'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      Specific Daily Time
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setScheduleMode('preset')}
+                      className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                        scheduleMode === 'preset'
+                          ? 'bg-zinc-800 text-emerald-400 font-bold'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      Presets
+                    </button>
+                  </div>
+                </div>
+
+                {scheduleMode === 'interval' && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-zinc-400">Repeat Every</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="99"
+                          value={intervalNumber}
+                          onChange={(e) => {
+                            const val = Math.max(1, Number(e.target.value) || 1);
+                            setIntervalNumber(val);
+                            setNewTaskInterval(computeIntervalString('interval', val, intervalUnit, dailyTime));
+                          }}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-zinc-400">Time Unit</label>
+                        <select
+                          value={intervalUnit}
+                          onChange={(e) => {
+                            const unit = e.target.value as 'hours' | 'days' | 'minutes' | 'weeks';
+                            setIntervalUnit(unit);
+                            setNewTaskInterval(computeIntervalString('interval', intervalNumber, unit, dailyTime));
+                          }}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="minutes">Minutes</option>
+                          <option value="hours">Hours</option>
+                          <option value="days">Days</option>
+                          <option value="weeks">Weeks</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {scheduleMode === 'daily_time' && (
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-zinc-400">Target Time (24h or AM/PM format)</label>
+                    <select
+                      value={dailyTime}
+                      onChange={(e) => {
+                        setDailyTime(e.target.value);
+                        setNewTaskInterval(`Daily at ${e.target.value}`);
+                      }}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="12:00 AM (Midnight)">12:00 AM (Midnight)</option>
+                      <option value="02:00 AM">02:00 AM (Low traffic)</option>
+                      <option value="04:00 AM">04:00 AM (Daily reset)</option>
+                      <option value="06:00 AM">06:00 AM</option>
+                      <option value="12:00 PM (Noon)">12:00 PM (Noon)</option>
+                      <option value="06:00 PM">06:00 PM (Evening peak)</option>
+                      <option value="10:00 PM">10:00 PM</option>
+                    </select>
+                  </div>
+                )}
+
+                {scheduleMode === 'preset' && (
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-zinc-400">Select Preset Timing</label>
+                    <select
+                      value={newTaskInterval}
+                      onChange={(e) => setNewTaskInterval(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="Every 30 Minutes">Every 30 Minutes</option>
+                      <option value="Every 1 Hour">Every 1 Hour</option>
+                      <option value="Every 2 Hours">Every 2 Hours</option>
+                      <option value="Every 4 Hours">Every 4 Hours</option>
+                      <option value="Every 6 Hours">Every 6 Hours</option>
+                      <option value="Every 12 Hours">Every 12 Hours</option>
+                      <option value="Daily at 04:00 AM">Daily at 04:00 AM</option>
+                      <option value="Daily at 02:00 AM">Daily at 02:00 AM</option>
+                      <option value="Every 2 Days">Every 2 Days</option>
+                      <option value="Weekly on Sunday">Weekly on Sunday</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="pt-1 flex items-center justify-between text-[11px] font-mono text-zinc-400 border-t border-zinc-800/80">
+                  <span>Effective Timing:</span>
+                  <span className="text-emerald-400 font-bold">{newTaskInterval}</span>
+                </div>
               </div>
 
               {/* Submit Buttons */}

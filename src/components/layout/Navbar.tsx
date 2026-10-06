@@ -71,6 +71,15 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [downloadsOpen, setDownloadsOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
+  // Close all open dropdowns when clicking outside
+  const hasOpenDropdown = serverDropdownOpen || alertsOpen || downloadsOpen || userMenuOpen;
+  const closeAllDropdowns = () => {
+    setServerDropdownOpen(false);
+    setAlertsOpen(false);
+    setDownloadsOpen(false);
+    setUserMenuOpen(false);
+  };
+
   // Exclude archived servers from fleet count and online calculation
   const nonArchivedServers = servers.filter((s) => !s.isArchived);
   const runningCount = nonArchivedServers.filter((s) => s.status === 'online').length;
@@ -114,6 +123,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="h-16 bg-[#11151c] border-b border-zinc-800/80 px-4 md:px-6 flex items-center justify-between select-none sticky top-0 z-40">
+      {/* Click-away backdrop overlay to close all open dropdowns */}
+      {hasOpenDropdown && (
+        <div
+          className="fixed inset-0 z-40 bg-transparent"
+          onClick={closeAllDropdowns}
+        />
+      )}
       {/* Brand & Fleet / Server Switcher */}
       <div className="flex items-center gap-3 md:gap-5">
         <button
@@ -163,7 +179,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     }}
                     className="text-emerald-400 hover:underline cursor-pointer lowercase font-normal"
                   >
-                    fleet home
+                    dashboard
                   </button>
                 </div>
 

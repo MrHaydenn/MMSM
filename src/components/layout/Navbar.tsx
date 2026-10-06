@@ -37,6 +37,7 @@ interface NavbarProps {
   onOpenProfileModal?: () => void;
   onOpenWrapperSettings?: () => void;
   onNavigateToTab?: (serverId: string, tab: ActiveTab) => void;
+  onNavigateToUserManagement?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -48,6 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenProfileModal,
   onOpenWrapperSettings,
   onNavigateToTab,
+  onNavigateToUserManagement,
 }) => {
   const {
     servers,
@@ -542,6 +544,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <UserIcon className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Account Profile</span>
                 </button>
+
+                {currentUser?.role === 'admin' && onNavigateToUserManagement && (
+                  <button
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      onNavigateToUserManagement();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-purple-300 hover:text-purple-100 hover:bg-purple-950/40 text-xs font-medium transition-colors cursor-pointer text-left"
+                  >
+                    <UserCheck className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Manage Users</span>
+                  </button>
+                )}
               </div>
 
               <div className="pt-1">

@@ -1277,19 +1277,70 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Mod actions
   const installMod = (serverId: string, mod: InstalledMod) => {
+    const srv = servers.find((s) => s.id === serverId);
+    const baseDir = (wrapperSettings?.serversDirectory || './servers').replace(/\/+$/, '');
+    const serverName = srv?.name || 'server';
+    const serverRoot = `${baseDir}/${serverName}`;
+    const modFilePath = `${serverRoot}/mods/${mod.filename}`;
+    const modsDirPath = `${serverRoot}/mods`;
+
+    // 1. Add task history item to downloads monitor
+    addDownload({
+      serverId,
+      serverName: srv?.name || 'Minecraft Server',
+      title: mod.name,
+      filename: mod.filename,
+      totalSizeBytes: mod.fileSizeBytes || 1800000,
+      type: 'mod',
+      status: 'downloading',
+    });
+
+    // 2. Add mod to server's installed mods and sync to server.files
     setServers((prev) =>
       prev.map((s) => {
         if (s.id !== serverId) return s;
         const exists = s.mods.some((m) => m.id === mod.id || m.slug === mod.slug);
-        if (exists) {
-          return {
-            ...s,
-            mods: s.mods.map((m) => (m.id === mod.id || m.slug === mod.slug ? mod : m)),
-          };
+        const nextMods = exists
+          ? s.mods.map((m) => (m.id === mod.id || m.slug === mod.slug ? mod : m))
+          : [mod, ...s.mods];
+
+        const normModPath = modFilePath.replace(/^\.\//, '/').replace(/\/+/g, '/').toLowerCase();
+        const normModsDir = modsDirPath.replace(/^\.\//, '/').replace(/\/+/g, '/').toLowerCase();
+
+        let nextFiles = [...s.files];
+
+        if (!nextFiles.some((f) => f.path.replace(/^\.\//, '/').replace(/\/+/g, '/').toLowerCase() === normModsDir)) {
+          nextFiles.push({
+            id: `d-mods-${Date.now()}`,
+            name: 'mods',
+            path: modsDirPath,
+            isDirectory: true,
+            sizeBytes: 0,
+            lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
+          });
         }
+
+        const fileExists = nextFiles.some(
+          (f) => f.path.replace(/^\.\//, '/').replace(/\/+/g, '/').toLowerCase() === normModPath || f.name === mod.filename
+        );
+        
+        if (!fileExists) {
+          const modFileItem: ServerFile = {
+            id: `f-mod-${mod.id}-${Date.now()}`,
+            name: mod.filename,
+            path: modFilePath,
+            isDirectory: false,
+            sizeBytes: mod.fileSizeBytes || 1800000,
+            lastModified: new Date().toISOString().replace('T', ' ').substring(0, 19),
+            extension: 'jar',
+          };
+          nextFiles.push(modFileItem);
+        }
+
         return {
           ...s,
-          mods: [mod, ...s.mods],
+          mods: nextMods,
+          files: nextFiles,
         };
       })
     );
@@ -2162,8 +2213,8 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         cpuCores: (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : 8,
         totalDiskGb: 500,
       },
-      serversDirectory: '/Servers',
-      backupsDirectory: '/Backups',
+      serversDirectory: './servers',
+      backupsDirectory: './backups',
       defaultMinRamGb: 2,
       defaultMaxRamGb: 4,
       defaultJavaPath: '/usr/lib/jvm/temurin-21-jdk',
@@ -2293,6 +2344,22 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const uploadModFile = (serverId: string, fileName: string, fileBytes: number) => {
+    const srv = servers.find((s) => s.id === serverId);
+    const baseDir = (wrapperSettings?.serversDirectory || './servers').replace(/\/+$/, '');
+    const serverName = srv?.name || 'server';
+    const serverRoot = `${baseDir}/${serverName}`;
+    const modFilePath = `${serverRoot}/mods/${fileName}`;
+
+    addDownload({
+      serverId,
+      serverName: srv?.name || 'Minecraft Server',
+      title: fileName,
+      filename: fileName,
+      totalSizeBytes: fileBytes || 1200000,
+      type: 'mod',
+      status: 'downloading',
+    });
+
     const slug = fileName.replace(/\.jar(\.disabled)?$/, '').toLowerCase();
     const cleanName = fileName.replace(/[-_]/g, ' ').replace(/\.jar(\.disabled)?$/, '');
     const newMod: InstalledMod = {
@@ -2315,7 +2382,7 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       prev.map((s) => (s.id === serverId ? { ...s, mods: [newMod, ...s.mods] } : s))
     );
 
-    createFile(serverId, `/mods/${fileName}`, false, '');
+    createFile(serverId, modFilePath, false, '');
 
     addLog(serverId, {
       timestamp: getTimestamp(),

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Folder,
   File,
@@ -21,16 +21,28 @@ import {
   RefreshCw,
   FolderPlus,
   FilePlus,
+  Sparkles,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
 import { ServerFile } from '../../types/server';
 
 export const FileManager: React.FC = () => {
-  const { activeServer, saveFile, createFile, deleteFile, renameFile } = useServer();
+  const { activeServer, saveFile, createFile, deleteFile, renameFile, uploadModFile } = useServer();
   const { canPerformAction } = useAuth();
 
-  const [currentDir, setCurrentDir] = useState<string>('/');
+  const normalizePath = (p: string) => {
+    if (!p) return '/';
+    let norm = p.replace(/^\.\//, '/').replace(/\/+/g, '/');
+    if (norm.length > 1 && norm.endsWith('/')) {
+      norm = norm.slice(0, -1);
+    }
+    return norm;
+  };
+
+  const [currentDir, setCurrentDir] = useState<string>(() => {
+    return activeServer ? `./servers/${activeServer.name}` : '/';
+  });
   const [searchQuery, setSearchQuery] = useState('');
   
   // Editor state
@@ -40,6 +52,7 @@ export const FileManager: React.FC = () => {
 
   // New file / folder modals
   const [isNewFileModalOpen, setIsNewFileModalOpen] = useState(false);
+  const [newFileType, setNewFileType] = useState<'create' | 'upload'>('create');
   const [newFileName, setNewFileName] = useState('');
   const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -50,6 +63,18 @@ export const FileManager: React.FC = () => {
 
   // Delete modal
   const [deletingFile, setDeletingFile] = useState<ServerFile | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Route to the active server's folder by default on select or mount
+  useEffect(() => {
+    if (activeServer) {
+      const serverFolderInFiles = activeServer.files?.find(
+        (f) => f.isDirectory && f.name.toLowerCase() === activeServer.name.toLowerCase()
+      )?.path;
+      setCurrentDir(serverFolderInFiles || `./servers/${activeServer.name}`);
+    }
+  }, [activeServer?.id, activeServer?.name]);
 
   if (!activeServer) {
     return (
@@ -64,26 +89,61 @@ export const FileManager: React.FC = () => {
   const files = activeServer.files || [];
 
   // Filter items in current directory
+  const normCurrentDir = normalizePath(currentDir);
+
   const currentDirectoryFiles = files.filter((f) => {
+    const normFilePath = normalizePath(f.path);
+    if (normFilePath === normCurrentDir) return false;
+
     if (searchQuery.trim()) {
       return (
         f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.path.toLowerCase().includes(searchQuery.toLowerCase())
+        normFilePath.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
-    if (currentDir === '/') {
-      // Top level items: path is like "/file.txt" or "/mods"
-      const parts = f.path.split('/').filter(Boolean);
-      return parts.length === 1;
-    } else {
-      // Nested items: path starts with currentDir and has exactly 1 more segment
-      const prefix = `${currentDir}/`;
-      if (!f.path.startsWith(prefix)) return false;
-      const rest = f.path.substring(prefix.length);
-      return !rest.includes('/');
+    const prefix = `${normCurrentDir}/`;
+    if (normFilePath.startsWith(prefix)) {
+      const rest = normFilePath.substring(prefix.length);
+      return rest.length > 0 && !rest.includes('/');
     }
+
+    // Fallback: If files are stored like /mods or /server.properties while currentDir is /servers/serverName
+    const serverNameClean = activeServer.name.toLowerCase();
+    if (normCurrentDir.includes(serverNameClean)) {
+      const parts = normFilePath.split('/').filter(Boolean);
+      if (parts.length === 1 && f.name.toLowerCase() !== 'servers' && f.name.toLowerCase() !== serverNameClean) {
+        return true;
+      }
+    }
+
+    return false;
   });
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const fileName = file.name;
+    const filePath = currentDir === '/' ? `/${fileName}` : `${currentDir}/${fileName}`;
+
+    if (fileName.match(/\.(jar|zip|gz|png|jpg|jpeg|ico|tar)$/i)) {
+      createFile(activeServer.id, filePath, false, '');
+      if (fileName.endsWith('.jar')) {
+        uploadModFile(activeServer.id, fileName, file.size);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const text = typeof evt.target?.result === 'string' ? evt.target.result : '';
+        createFile(activeServer.id, filePath, false, text);
+      };
+      reader.readAsText(file);
+    }
+
+    setIsNewFileModalOpen(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   // Sort folders first, then files alphabetically
   const sortedFiles = [...currentDirectoryFiles].sort((a, b) => {
@@ -226,11 +286,25 @@ export const FileManager: React.FC = () => {
         {canPerformAction('edit_config') && (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setIsNewFileModalOpen(true)}
+              onClick={() => {
+                setNewFileType('create');
+                setIsNewFileModalOpen(true);
+              }}
               className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700/80 flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <FilePlus className="w-3.5 h-3.5" />
               <span>New File</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setNewFileType('upload');
+                setIsNewFileModalOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Upload File</span>
             </button>
 
             <button
@@ -480,44 +554,113 @@ export const FileManager: React.FC = () => {
         </div>
       )}
 
-      {/* NEW FILE MODAL */}
+      {/* NEW FILE / UPLOAD FILE MODAL */}
       {isNewFileModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form
-            onSubmit={handleCreateNewFile}
-            className="bg-[#11151c] border border-zinc-800 rounded-xl p-5 w-full max-w-md space-y-4 shadow-2xl"
-          >
-            <h3 className="font-bold text-zinc-100 text-sm">Create New File</h3>
-            <p className="text-xs text-zinc-400 font-mono">In directory: {currentDir}</p>
-
-            <div className="space-y-1">
-              <label className="text-xs text-zinc-400">File Name (including extension)</label>
-              <input
-                type="text"
-                required
-                value={newFileName}
-                onChange={(e) => setNewFileName(e.target.value)}
-                placeholder="e.g. motd.txt, custom.properties, rules.json"
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
+          <div className="bg-[#11151c] border border-zinc-800 rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-zinc-100 text-sm">Add File to Directory</h3>
               <button
                 type="button"
                 onClick={() => setIsNewFileModalOpen(false)}
-                className="px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200"
+                className="text-zinc-500 hover:text-zinc-200"
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold"
-              >
-                Create File
+                <X className="w-4 h-4" />
               </button>
             </div>
-          </form>
+
+            <p className="text-xs text-zinc-400 font-mono bg-zinc-950 p-2 rounded-lg border border-zinc-900 truncate">
+              Target Folder: {currentDir}
+            </p>
+
+            {/* Selector Tabs */}
+            <div className="grid grid-cols-2 gap-2 bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setNewFileType('create')}
+                className={`py-2 rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  newFileType === 'create'
+                    ? 'bg-zinc-800 text-emerald-400 shadow'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <FilePlus className="w-3.5 h-3.5" />
+                <span>Create Blank File</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewFileType('upload')}
+                className={`py-2 rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  newFileType === 'upload'
+                    ? 'bg-zinc-800 text-emerald-400 shadow'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload from PC</span>
+              </button>
+            </div>
+
+            {newFileType === 'create' ? (
+              <form onSubmit={handleCreateNewFile} className="space-y-4 pt-1">
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-300 font-medium">File Name (with extension)</label>
+                  <input
+                    type="text"
+                    required
+                    value={newFileName}
+                    onChange={(e) => setNewFileName(e.target.value)}
+                    placeholder="e.g. motd.txt, server.properties, rules.json"
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-100 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsNewFileModalOpen(false)}
+                    className="px-3.5 py-2 rounded-lg text-xs text-zinc-400 hover:text-zinc-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow"
+                  >
+                    Create File
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-3 pt-1">
+                <label className="flex flex-col items-center justify-center p-6 bg-zinc-950 border-2 border-dashed border-zinc-800 hover:border-emerald-500/60 rounded-xl cursor-pointer transition-all group">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <Upload className="w-8 h-8 text-zinc-500 group-hover:text-emerald-400 mb-2 transition-colors" />
+                  <span className="text-xs font-bold text-zinc-200 group-hover:text-emerald-300">
+                    Choose File to Upload
+                  </span>
+                  <span className="text-[10px] text-zinc-500 mt-1">
+                    Supports .jar, .json, .properties, .png, .txt, .cfg, .toml, .yml
+                  </span>
+                </label>
+
+                <div className="flex items-center justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsNewFileModalOpen(false)}
+                    className="px-3.5 py-2 rounded-lg text-xs text-zinc-400 hover:text-zinc-200"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

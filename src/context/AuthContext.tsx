@@ -11,6 +11,7 @@ interface AuthContextType {
   addUser: (data: { username: string; displayName: string; role: UserRole; allowedServerIds?: string[] }) => void;
   updateUserRole: (userId: string, role: UserRole) => void;
   deleteUser: (userId: string) => boolean;
+  purgeAllAccounts: () => void;
   updateProfile: (data: { displayName?: string; avatarSeed?: string; customAvatarUrl?: string; password?: string }) => void;
   canPerformAction: (action: 'manage_servers' | 'server_power' | 'execute_commands' | 'manage_mods' | 'manage_backups' | 'manage_users' | 'edit_config') => boolean;
 }
@@ -136,9 +137,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteUser = (userId: string) => {
-    if (userId === currentUser?.id) return false;
-    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    const isDeletingSelf = userId === currentUser?.id;
+    const remainingUsers = users.filter((u) => u.id !== userId);
+    setUsers(remainingUsers);
+    
+    if (isDeletingSelf) {
+      setCurrentUser(null);
+      localStorage.removeItem('crafty_current_user');
+    }
+    if (remainingUsers.length === 0) {
+      localStorage.removeItem('crafty_users');
+    } else {
+      localStorage.setItem('crafty_users', JSON.stringify(remainingUsers));
+    }
     return true;
+  };
+
+  const purgeAllAccounts = () => {
+    setUsers([]);
+    setCurrentUser(null);
+    localStorage.removeItem('crafty_users');
+    localStorage.removeItem('crafty_current_user');
   };
 
   const updateProfile = (data: {
@@ -193,6 +212,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addUser,
         updateUserRole,
         deleteUser,
+        purgeAllAccounts,
         updateProfile,
         canPerformAction,
       }}

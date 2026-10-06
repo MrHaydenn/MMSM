@@ -14,13 +14,16 @@ import { useServer } from '../../context/ServerContext';
 import { UserRole } from '../../types/server';
 
 export const UserManagementView: React.FC = () => {
-  const { users, currentUser, addUser, updateUserRole, deleteUser } = useAuth();
+  const { users, currentUser, addUser, updateUserRole, deleteUser, purgeAllAccounts } = useAuth();
   const { servers } = useServer();
 
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('operator');
+
+  const [deletingUser, setDeletingUser] = useState<import('../../types/server').UserAccount | null>(null);
+  const [isResetAccountsOpen, setIsResetAccountsOpen] = useState(false);
 
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,13 +73,23 @@ export const UserManagementView: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={() => setIsAddUserOpen(true)}
-          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New User</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsResetAccountsOpen(true)}
+            className="px-3.5 py-2 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+            title="Wipe all accounts and return to First-Time Setup"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Reset All Accounts</span>
+          </button>
+          <button
+            onClick={() => setIsAddUserOpen(true)}
+            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New User</span>
+          </button>
+        </div>
       </div>
 
       {/* Permissions Matrix Info */}
@@ -134,6 +147,11 @@ export const UserManagementView: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-zinc-100 text-sm">{user.displayName}</span>
                     <span className="text-zinc-500 font-mono">@{user.username}</span>
+                    {user.id === currentUser?.id && (
+                      <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-bold">
+                        You
+                      </span>
+                    )}
                     <span
                       className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded border font-semibold ${getRoleBadge(
                         user.role
@@ -160,15 +178,13 @@ export const UserManagementView: React.FC = () => {
                   <option value="viewer">Viewer</option>
                 </select>
 
-                {user.id !== currentUser?.id && (
-                  <button
-                    onClick={() => deleteUser(user.id)}
-                    className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950/40 text-zinc-500 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
-                    title="Delete user"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
+                <button
+                  onClick={() => setDeletingUser(user)}
+                  className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950/40 text-zinc-500 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
+                  title={user.id === currentUser?.id ? "Delete your own account" : "Delete user"}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
           ))}
@@ -245,6 +261,93 @@ export const UserManagementView: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+      {/* DELETE USER CONFIRMATION MODAL */}
+      {deletingUser && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#11151c] border border-rose-900/60 rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-zinc-100 text-base">Delete Account "@{deletingUser.username}"?</h3>
+                <p className="text-xs text-zinc-400">
+                  {deletingUser.id === currentUser?.id
+                    ? "Warning: You are deleting your current active session account!"
+                    : "This user will lose access immediately."}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              {deletingUser.id === currentUser?.id
+                ? "Deleting your own account will log you out immediately. If no other accounts remain, MMSM will reset to the First-Time Owner Setup screen."
+                : `Are you sure you want to permanently delete user account "${deletingUser.displayName}" (@${deletingUser.username})?`}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setDeletingUser(null)}
+                className="px-3.5 py-2 rounded-lg text-xs text-zinc-300 hover:text-zinc-100 bg-zinc-900 border border-zinc-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteUser(deletingUser.id);
+                  setDeletingUser(null);
+                }}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-950/50 cursor-pointer"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESET ALL ACCOUNTS CONFIRMATION MODAL */}
+      {isResetAccountsOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#11151c] border border-rose-900/60 rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-zinc-100 text-base">Wipe All User Accounts?</h3>
+                <p className="text-xs text-zinc-400">Reset to Clean Slate First-Time Setup</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              This will erase all registered accounts from local storage. You will be logged out and taken back to the First-Time Owner Creation page.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setIsResetAccountsOpen(false)}
+                className="px-3.5 py-2 rounded-lg text-xs text-zinc-300 hover:text-zinc-100 bg-zinc-900 border border-zinc-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  purgeAllAccounts();
+                  setIsResetAccountsOpen(false);
+                }}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-950/50 cursor-pointer"
+              >
+                Reset & Clear Roster
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

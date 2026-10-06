@@ -86,6 +86,10 @@ const MainLayout: React.FC = () => {
           setSelectedServerView(true);
           setActiveTab(tab);
         }}
+        onNavigateToUserManagement={() => {
+          setSelectedServerView(true);
+          setActiveTab('users');
+        }}
       />
 
       {/* Main Viewport */}

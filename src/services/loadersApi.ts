@@ -1,3 +1,5 @@
+import { ServerLoader } from '../types/server';
+
 export interface McVersionOption {
   id: string;
   type: 'release' | 'snapshot';
@@ -79,6 +81,40 @@ export async function fetchPaperBuilds(mcVersion: string = '1.21.4'): Promise<Lo
       { version: 'build #162', stable: true },
     ];
   }
+}
+
+export async function fetchLoaderVersionsForLoader(
+  loader: ServerLoader,
+  mcVersion: string = '1.21.4'
+): Promise<string[]> {
+  if (loader === 'vanilla') {
+    return [];
+  }
+  if (loader === 'fabric') {
+    const list = await fetchFabricLoaderVersions();
+    return list.map((l) => l.version);
+  }
+  if (loader === 'paper') {
+    const list = await fetchPaperBuilds(mcVersion);
+    return list.map((l) => l.version);
+  }
+  if (loader === 'neoforge') {
+    return mcVersion === '1.21.4'
+      ? ['21.4.28-beta', '21.4.20-beta', '21.4.15-beta', '21.4.10-beta']
+      : ['21.1.95', '21.1.90', '21.1.80'];
+  }
+  if (loader === 'purpur') {
+    return ['build #2340', 'build #2339', 'build #2335', 'build #2320'];
+  }
+  if (loader === 'quilt') {
+    return ['0.27.0', '0.26.1', '0.25.0'];
+  }
+  if (loader === 'forge') {
+    return mcVersion === '1.20.1'
+      ? ['47.3.0', '47.2.20', '47.2.0']
+      : ['51.0.8', '51.0.5', '51.0.1'];
+  }
+  return [getLatestLoaderVersion(loader, mcVersion).latestVersion];
 }
 
 export function getLatestLoaderVersion(

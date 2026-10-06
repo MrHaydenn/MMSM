@@ -127,10 +127,28 @@ export const ConfigEditor: React.FC = () => {
   const handleIconFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        updateServerIcon(activeServer.id, reader.result);
+        const img = new Image();
+        img.onload = () => {
+          // Draw to canvas with 64x64 dimensions, preserving aspect ratio and converting to PNG
+          const canvas = document.createElement('canvas');
+          canvas.width = 64;
+          canvas.height = 64;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.imageSmoothingEnabled = false; // pixelated look for Minecraft icons
+            ctx.clearRect(0, 0, 64, 64);
+            ctx.drawImage(img, 0, 0, 64, 64);
+            const resizedDataUrl = canvas.toDataURL('image/png');
+            updateServerIcon(activeServer.id, resizedDataUrl);
+          } else {
+            updateServerIcon(activeServer.id, reader.result as string);
+          }
+        };
+        img.src = reader.result;
       }
     };
     reader.readAsDataURL(file);
@@ -358,14 +376,14 @@ export const ConfigEditor: React.FC = () => {
             </div>
           </div>
 
-          {/* AMP-STYLE HIBERNATION / SLEEP MODE SECTION */}
+          {/* SERVER SLEEP & HIBERNATION MODE */}
           <div className="bg-[#11151c] border border-zinc-800 rounded-xl p-5 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
               <div className="flex items-center gap-2">
                 <Moon className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-sm font-semibold text-zinc-100">AMP-Style Auto-Sleep & Instant Ping Wake</h3>
+                <h3 className="text-sm font-semibold text-zinc-100">Server Sleep & Inactivity Hibernation</h3>
                 <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-950/60 text-indigo-300 border border-indigo-800/50">
-                  Hibernation Proxy
+                  Standby Proxy
                 </span>
               </div>
 

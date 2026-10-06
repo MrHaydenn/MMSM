@@ -81,6 +81,11 @@ const MainLayout: React.FC = () => {
         }}
         onOpenProfileModal={() => setIsProfileModalOpen(true)}
         onOpenWrapperSettings={() => setIsWrapperSettingsOpen(true)}
+        onNavigateToTab={(serverId, tab) => {
+          setActiveServerId(serverId);
+          setSelectedServerView(true);
+          setActiveTab(tab);
+        }}
       />
 
       {/* Main Viewport */}

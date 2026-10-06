@@ -157,99 +157,61 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   return (
-    <aside
-      className={`bg-[#0e1218] border-r border-zinc-800/80 flex flex-col shrink-0 select-none transition-all duration-200 ${
-        isCollapsed ? 'w-16' : 'w-64'
-      }`}
-    >
-      {/* Return to Main Dashboard + Hamburger Toggle */}
-      <div className="p-2.5 border-b border-zinc-800/80 bg-[#11151c]/90 flex items-center gap-2">
-        {onToggleCollapse && (
-          <button
-            onClick={onToggleCollapse}
-            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-colors cursor-pointer shrink-0"
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse to symbols'}
-          >
-            {isCollapsed ? <Menu className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-          </button>
-        )}
-
-        {!isCollapsed && (
-          <button
-            onClick={onBackToDashboard}
-            className="flex-1 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 text-xs font-semibold transition-colors cursor-pointer group truncate"
-            title="Return to Main Dashboard"
-          >
-            <ArrowLeft className="w-3.5 h-3.5 text-emerald-400 group-hover:-translate-x-0.5 transition-transform shrink-0" />
-            <span className="truncate">Dashboard</span>
-          </button>
-        )}
+    <aside className="bg-[#0e1218] border-r border-zinc-800/80 flex flex-col shrink-0 select-none w-64">
+      {/* Return to Main Dashboard */}
+      <div className="p-2.5 border-b border-zinc-800/80 bg-[#11151c]/90">
+        <button
+          onClick={onBackToDashboard}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 text-xs font-semibold transition-colors cursor-pointer group"
+          title="Return to Main Dashboard"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 text-emerald-400 group-hover:-translate-x-0.5 transition-transform shrink-0" />
+          <span className="truncate">Fleet Dashboard</span>
+        </button>
       </div>
 
       {/* Active Server Info Header */}
-      {!isCollapsed ? (
-        <div className="p-4 border-b border-zinc-800/60 bg-[#11151c]/50">
-          <div className="flex items-center gap-3">
-            <div className="relative shrink-0">
-              {activeServer.serverIconUrl ? (
-                <img
-                  src={activeServer.serverIconUrl}
-                  alt={activeServer.name}
-                  className="w-9 h-9 rounded-lg border border-zinc-700 bg-zinc-800 object-contain p-0.5"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src =
-                      'https://api.iconify.design/pixelarticons:sword.svg';
-                  }}
-                />
-              ) : (
-                <div className="w-9 h-9 rounded-lg bg-emerald-950/70 border border-emerald-800/60 flex items-center justify-center text-emerald-400 font-bold text-xs">
-                  MC
-                </div>
-              )}
-              <div
-                className={`absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-[#11151c] ${
-                  activeServer.status === 'online'
-                    ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
-                    : activeServer.status === 'sleeping'
-                    ? 'bg-indigo-400'
-                    : 'bg-zinc-500'
-                }`}
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 font-mono">
-                Active Instance
-              </span>
-              <p className="font-semibold text-zinc-100 text-sm truncate leading-tight">{activeServer.name}</p>
-              <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 font-mono truncate">
-                <span className="capitalize">{activeServer.loader}</span>
-                <span>·</span>
-                <span>:{activeServer.port}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="p-3 border-b border-zinc-800/60 flex justify-center">
-          <div className="relative">
+      <div className="p-4 border-b border-zinc-800/60 bg-[#11151c]/50">
+        <div className="flex items-center gap-3">
+          <div className="relative shrink-0">
             {activeServer.serverIconUrl ? (
               <img
                 src={activeServer.serverIconUrl}
                 alt={activeServer.name}
-                className="w-7 h-7 rounded border border-zinc-700 bg-zinc-800 object-contain p-0.5"
-                title={`${activeServer.name} (${activeServer.status})`}
+                className="w-9 h-9 rounded-lg border border-zinc-700 bg-zinc-800 object-contain p-0.5"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src =
+                    'https://api.iconify.design/pixelarticons:sword.svg';
+                }}
               />
             ) : (
-              <div
-                className={`w-3 h-3 rounded-full ${
-                  activeServer.status === 'online' ? 'bg-emerald-500' : 'bg-zinc-600'
-                }`}
-                title={`${activeServer.name} (${activeServer.status})`}
-              />
+              <div className="w-9 h-9 rounded-lg bg-emerald-950/70 border border-emerald-800/60 flex items-center justify-center text-emerald-400 font-bold text-xs">
+                MC
+              </div>
             )}
+            <div
+              className={`absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-[#11151c] ${
+                activeServer.status === 'online'
+                  ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
+                  : activeServer.status === 'sleeping'
+                  ? 'bg-indigo-400'
+                  : 'bg-zinc-500'
+              }`}
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 font-mono">
+              Active Instance
+            </span>
+            <p className="font-semibold text-zinc-100 text-sm truncate leading-tight">{activeServer.name}</p>
+            <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 font-mono truncate">
+              <span className="capitalize">{activeServer.loader}</span>
+              <span>·</span>
+              <span>:{activeServer.port}</span>
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Navigation Links */}
       <nav className="p-2 space-y-1 flex-1 overflow-y-auto">
@@ -297,19 +259,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
       </nav>
-
-      {/* Modrinth footer note (only when expanded) */}
-      {!isCollapsed && (
-        <div className="p-3 m-3 rounded-xl bg-zinc-900/80 border border-zinc-800 text-xs space-y-1.5">
-          <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-[11px]">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Modrinth Sync Active</span>
-          </div>
-          <p className="text-[11px] text-zinc-400 leading-relaxed">
-            {activeServer.mods.length} mods / plugins configured.
-          </p>
-        </div>
-      )}
     </aside>
   );
 };

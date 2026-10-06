@@ -137,15 +137,6 @@ export const ConsoleView: React.FC = () => {
     }
   };
 
-  const quickCommands = [
-    { label: '/tps', cmd: '/tps' },
-    { label: '/list', cmd: '/list' },
-    { label: '/save-all', cmd: '/save-all' },
-    { label: 'Time Day', cmd: '/time set day' },
-    { label: 'Weather Clear', cmd: '/weather clear' },
-    { label: 'Keep Inventory', cmd: '/gamerule keepInventory true' },
-  ];
-
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 space-y-4 max-w-[1600px] mx-auto w-full">
       {/* Top Telemetry & Power Bar */}
@@ -368,25 +359,6 @@ export const ConsoleView: React.FC = () => {
         )}
         <div ref={consoleEndRef} />
       </div>
-
-      {/* Quick Command Suggestions */}
-      {canPerformAction('execute_commands') && (
-        <div className="bg-[#10141a] border-x border-zinc-800 px-4 py-2 flex items-center gap-2 overflow-x-auto text-xs">
-          <span className="text-[11px] text-zinc-500 font-mono uppercase shrink-0">Quick Cmds:</span>
-          {quickCommands.map((qc) => (
-            <button
-              key={qc.cmd}
-              onClick={() => {
-                setCommandInput(qc.cmd);
-                executeCommand(qc.cmd, activeServer.id);
-              }}
-              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-emerald-400 border border-zinc-800 font-mono text-[11px] shrink-0 transition-colors cursor-pointer"
-            >
-              {qc.label}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Command Input Bar */}
       <div className="bg-[#11151c] border border-zinc-800 rounded-b-xl p-3 flex items-center gap-3">

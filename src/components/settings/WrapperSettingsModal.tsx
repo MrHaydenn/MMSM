@@ -13,9 +13,17 @@ import {
   Cpu,
   FileCheck,
   AlertTriangle,
+  Terminal,
+  Download,
+  Copy,
+  Check,
+  Folder,
+  Globe,
+  Image,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
+import { MinecraftServer } from '../../types/server';
 
 interface WrapperSettingsModalProps {
   isOpen: boolean;
@@ -35,8 +43,10 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
   } = useServer();
   const { canPerformAction } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'general' | 'vault'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'launcher' | 'vault'>('general');
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [deleteConfirmServer, setDeleteConfirmServer] = useState<MinecraftServer | null>(null);
+  const [copiedBatch, setCopiedBatch] = useState(false);
 
   if (!isOpen) return null;
 
@@ -46,6 +56,50 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
     e.preventDefault();
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  const batchScriptContent = `@echo off
+title MMSM - MrHaydenn's Minecraft Server Manager
+color 0A
+cls
+echo ===================================================
+echo   Starting MMSM - Minecraft Server Manager Wrapper
+echo ===================================================
+echo.
+
+where node >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [ERROR] Node.js is not installed or not in PATH!
+    echo Please install Node.js (v18+) from https://nodejs.org
+    pause
+    exit /b
+)
+
+if not exist node_modules (
+    echo [MMSM] Installing dependencies (first run)...
+    call npm install
+)
+
+echo [MMSM] Launching server management wrapper on http://localhost:3000 ...
+start http://localhost:3000
+npm run dev
+pause
+`;
+
+  const handleDownloadLauncher = () => {
+    const blob = new Blob([batchScriptContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'start-mmsm.bat';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopyBatch = () => {
+    navigator.clipboard.writeText(batchScriptContent);
+    setCopiedBatch(true);
+    setTimeout(() => setCopiedBatch(false), 2500);
   };
 
   return (
@@ -58,8 +112,8 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
               <Settings className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-zinc-100">CraftyForge Wrapper Settings</h2>
-              <p className="text-xs text-zinc-400">Global launcher preferences & archived instances vault</p>
+              <h2 className="text-base font-bold text-zinc-100">MMSM Wrapper Settings</h2>
+              <p className="text-xs text-zinc-400">Global launcher preferences, startup scripts & archived instances</p>
             </div>
           </div>
 
@@ -86,6 +140,18 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('launcher')}
+            className={`px-4 py-2 border-b-2 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-2 ${
+              activeTab === 'launcher'
+                ? 'border-emerald-500 text-emerald-400'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>Standalone Startup (.bat / CMD)</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('vault')}
             className={`px-4 py-2 border-b-2 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-2 ${
               activeTab === 'vault'
@@ -94,19 +160,14 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
             }`}
           >
             <Archive className="w-3.5 h-3.5" />
-            <span>Archived Servers Vault</span>
-            {archivedServers.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-amber-950/60 text-amber-400 text-[10px] font-mono border border-amber-800/40">
-                {archivedServers.length}
-              </span>
-            )}
+            <span>Archived Servers ({archivedServers.length})</span>
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto space-y-6">
           {saveSuccess && (
-            <div className="p-3 bg-emerald-950/60 border border-emerald-800 text-xs text-emerald-300 rounded-lg flex items-center gap-2">
+            <div className="p-3.5 bg-emerald-950/60 border border-emerald-800 text-xs text-emerald-300 rounded-xl flex items-center gap-2.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>Wrapper settings saved successfully!</span>
             </div>
@@ -114,30 +175,69 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
 
           {activeTab === 'general' && (
             <form onSubmit={handleSave} className="space-y-6">
-              {/* EULA Setting (Auto-accept) */}
-              <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-3">
-                <div className="flex items-start justify-between gap-4">
+              {/* Directory Paths Configuration */}
+              <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Folder className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
+                    Default Storage Locations
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-xs">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <FileCheck className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs font-bold text-zinc-200">
-                        Auto-Accept Minecraft EULA (Mojang)
-                      </span>
-                    </div>
-                    <p className="text-xs text-zinc-400 leading-relaxed">
-                      Automatically writes <code className="text-emerald-400 font-mono bg-zinc-950 px-1 py-0.5 rounded">eula=true</code> into newly created server directories. Bypasses manual eula.txt confirmation so servers launch immediately on first boot.
-                    </p>
+                    <label className="text-zinc-300 font-medium flex items-center justify-between">
+                      <span>Default Servers Directory</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">Each server created in its own folder</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={wrapperSettings.serversDirectory || '/Servers'}
+                      onChange={(e) =>
+                        updateWrapperSettings({ serversDirectory: e.target.value })
+                      }
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                    />
                   </div>
 
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                  <div className="space-y-1">
+                    <label className="text-zinc-300 font-medium flex items-center justify-between">
+                      <span>Default Backups Directory</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">Secondary drives supported (e.g. D:/Backups)</span>
+                    </label>
                     <input
-                      type="checkbox"
-                      checked={wrapperSettings.autoAcceptEula}
-                      onChange={(e) => updateWrapperSettings({ autoAcceptEula: e.target.checked })}
-                      className="sr-only peer"
+                      type="text"
+                      value={wrapperSettings.backupsDirectory || '/Backups'}
+                      onChange={(e) =>
+                        updateWrapperSettings({ backupsDirectory: e.target.value })
+                      }
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
                     />
-                    <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                  </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Public Connection Settings */}
+              <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
+                    Public Connection IP / Domain
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  <label className="text-zinc-300 font-medium">Public IP / Hostname for Players</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. play.craftyfleet.com or 142.250.190.46"
+                    value={wrapperSettings.publicIp || ''}
+                    onChange={(e) => updateWrapperSettings({ publicIp: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-[11px] text-zinc-500 font-mono">
+                    This address will be displayed on server cards for players to connect to.
+                  </p>
                 </div>
               </div>
 
@@ -145,98 +245,79 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
               <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-4">
                 <div className="flex items-center gap-2">
                   <Database className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold text-zinc-200">
-                    Default RAM Allocation For New Servers (in GB)
+                  <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
+                    Default Memory Allocations (GB)
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono">
                   <div className="space-y-1.5">
-                    <label className="text-zinc-400 block">Default Minimum RAM (-Xms)</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="1"
-                        max="64"
-                        step="1"
-                        value={wrapperSettings.defaultMinRamGb || 2}
-                        onChange={(e) => updateWrapperSettings({ defaultMinRamGb: Number(e.target.value) || 1 })}
-                        className="w-full bg-[#0a0d12] border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 focus:outline-none focus:border-emerald-500"
-                      />
-                      <span className="text-emerald-400 text-xs font-bold">GB</span>
-                    </div>
+                    <label className="text-zinc-400 block font-sans">Default Min RAM (-Xms)</label>
+                    <select
+                      value={wrapperSettings.defaultMinRamGb}
+                      onChange={(e) =>
+                        updateWrapperSettings({ defaultMinRamGb: Number(e.target.value) })
+                      }
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none"
+                    >
+                      {[1, 2, 4, 6, 8, 12, 16].map((gb) => (
+                        <option key={gb} value={gb}>
+                          {gb} GB ({gb * 1024} MB)
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-zinc-400 block">Default Maximum RAM (-Xmx)</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="1"
-                        max="128"
-                        step="1"
-                        value={wrapperSettings.defaultMaxRamGb || 4}
-                        onChange={(e) => updateWrapperSettings({ defaultMaxRamGb: Number(e.target.value) || 2 })}
-                        className="w-full bg-[#0a0d12] border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 focus:outline-none focus:border-emerald-500"
-                      />
-                      <span className="text-emerald-400 text-xs font-bold">GB</span>
-                    </div>
+                    <label className="text-zinc-400 block font-sans">Default Max RAM (-Xmx)</label>
+                    <select
+                      value={wrapperSettings.defaultMaxRamGb}
+                      onChange={(e) =>
+                        updateWrapperSettings({ defaultMaxRamGb: Number(e.target.value) })
+                      }
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none"
+                    >
+                      {[2, 4, 6, 8, 12, 16, 24, 32, 64].map((gb) => (
+                        <option key={gb} value={gb}>
+                          {gb} GB ({gb * 1024} MB)
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>
 
-              {/* Network and Ports with 2 boxes and dash */}
+              {/* Port Range */}
               <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-4">
                 <div className="flex items-center gap-2">
                   <Server className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold text-zinc-200">
-                    Server Port Range (Auto-Assignment)
+                  <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
+                    Auto-Allocation Port Range
                   </span>
                 </div>
 
-                <div className="space-y-1.5 text-xs font-mono">
-                  <label className="text-zinc-400 block">
-                    Available Port Range for New Servers
-                  </label>
-                  <p className="text-[11px] text-zinc-500 font-sans">
-                    New servers created in the wizard will default to the lowest untaken port in this range. If all ports are taken, the port field will be left blank.
-                  </p>
-                  <div className="flex items-center gap-3 pt-1">
-                    <div className="flex-1">
-                      <input
-                        type="number"
-                        min="1024"
-                        max="65535"
-                        value={wrapperSettings.portRangeStart || 25560}
-                        onChange={(e) => updateWrapperSettings({ portRangeStart: Number(e.target.value) || 25560 })}
-                        placeholder="25560"
-                        className="w-full bg-[#0a0d12] border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 focus:outline-none focus:border-emerald-500 text-center font-mono"
-                      />
-                    </div>
-                    <span className="text-zinc-500 font-bold text-lg select-none">–</span>
-                    <div className="flex-1">
-                      <input
-                        type="number"
-                        min="1024"
-                        max="65535"
-                        value={wrapperSettings.portRangeEnd || 25569}
-                        onChange={(e) => updateWrapperSettings({ portRangeEnd: Number(e.target.value) || 25569 })}
-                        placeholder="25569"
-                        className="w-full bg-[#0a0d12] border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 focus:outline-none focus:border-emerald-500 text-center font-mono"
-                      />
-                    </div>
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+                  <div className="space-y-1.5">
+                    <label className="text-zinc-400 block font-sans">Start Port</label>
+                    <input
+                      type="number"
+                      value={wrapperSettings.portRangeStart}
+                      onChange={(e) =>
+                        updateWrapperSettings({ portRangeStart: Number(e.target.value) })
+                      }
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none"
+                    />
                   </div>
-                  <div className="space-y-1.5 pt-2">
-                    <label className="text-zinc-400 block">Telemetry Refresh Frequency</label>
-                    <select
-                      value={wrapperSettings.telemetryIntervalMs}
-                      onChange={(e) => updateWrapperSettings({ telemetryIntervalMs: Number(e.target.value) })}
-                      className="w-full bg-[#0a0d12] border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100"
-                    >
-                      <option value={1500}>1.5 seconds (High fidelity)</option>
-                      <option value={2500}>2.5 seconds (Balanced)</option>
-                      <option value={5000}>5.0 seconds (Low CPU)</option>
-                    </select>
+                  <div className="space-y-1.5">
+                    <label className="text-zinc-400 block font-sans">End Port</label>
+                    <input
+                      type="number"
+                      value={wrapperSettings.portRangeEnd}
+                      onChange={(e) =>
+                        updateWrapperSettings({ portRangeEnd: Number(e.target.value) })
+                      }
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-200 focus:outline-none"
+                    />
                   </div>
                 </div>
               </div>
@@ -250,6 +331,68 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
                 </button>
               </div>
             </form>
+          )}
+
+          {activeTab === 'launcher' && (
+            <div className="space-y-5">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-zinc-200">Standalone Startup Launcher (.bat & CMD)</h3>
+                <p className="text-xs text-zinc-400">
+                  Run this wrapper easily on Windows or any other computer by launching the batch script or terminal command.
+                </p>
+              </div>
+
+              {/* One-Click Download Box */}
+              <div className="p-4 bg-emerald-950/20 border border-emerald-800/40 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="w-5 h-5 text-emerald-400" />
+                    <div>
+                      <h4 className="text-xs font-bold text-zinc-100">start-mmsm.bat (Windows Launcher)</h4>
+                      <p className="text-[11px] text-zinc-400">Double-click to start wrapper & launch dashboard in browser</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadLauncher}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950/40 flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download start-mmsm.bat</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Script Code Preview */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
+                  <span>Batch Script Contents (CMD / PowerShell):</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyBatch}
+                    className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 cursor-pointer font-sans"
+                  >
+                    {copiedBatch ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedBatch ? 'Copied!' : 'Copy Script'}</span>
+                  </button>
+                </div>
+
+                <pre className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl text-[11px] font-mono text-zinc-300 overflow-x-auto leading-relaxed">
+                  {batchScriptContent}
+                </pre>
+              </div>
+
+              <div className="p-4 bg-zinc-900/60 rounded-xl border border-zinc-800 space-y-2 text-xs text-zinc-400">
+                <p className="font-semibold text-zinc-200">How to launch on another computer:</p>
+                <ol className="list-decimal list-inside space-y-1 font-mono text-[11px]">
+                  <li>Copy project files to the target computer.</li>
+                  <li>Ensure Node.js (v18+) is installed.</li>
+                  <li>Double click <strong className="text-emerald-400">start-mmsm.bat</strong> (or run <code className="text-zinc-200">npm run dev</code>).</li>
+                  <li>The dashboard will launch automatically on <strong className="text-zinc-200">http://localhost:3000</strong>.</li>
+                </ol>
+              </div>
+            </div>
           )}
 
           {activeTab === 'vault' && (
@@ -309,11 +452,7 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
 
                         {canPerformAction('manage_servers') && (
                           <button
-                            onClick={() => {
-                              if (confirm(`Permanently delete archived server "${srv.name}"? This cannot be undone.`)) {
-                                deleteServer(srv.id);
-                              }
-                            }}
+                            onClick={() => setDeleteConfirmServer(srv)}
                             className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950/40 text-zinc-500 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
                             title="Permanently Delete"
                           >
@@ -329,6 +468,46 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* IN-APP CONFIRMATION MODAL FOR DELETING ARCHIVED SERVER */}
+      {deleteConfirmServer && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#11151c] border border-zinc-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-zinc-100">Permanently Delete Server?</h3>
+                <p className="text-xs text-zinc-400">Irreversible file deletion warning</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Are you sure you want to permanently delete <strong className="text-white font-mono">{deleteConfirmServer.name}</strong>?
+              All world files, configuration data, playerdata, and installed mods will be permanently erased.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                onClick={() => setDeleteConfirmServer(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  deleteServer(deleteConfirmServer.id);
+                  setDeleteConfirmServer(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-950/40 cursor-pointer transition-colors"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

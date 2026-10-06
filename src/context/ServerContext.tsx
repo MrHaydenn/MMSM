@@ -6,6 +6,7 @@ import {
   Player,
   BackupRecord,
   BackupSchedule,
+  BackupRule,
   ServerProperties,
   ServerStatus,
   ServerLoader,
@@ -34,12 +35,17 @@ interface ServerContextType {
   checkModUpdatesForServer: (serverId: string) => Promise<number>;
   // Loader update
   upgradeLoader: (serverId: string) => Promise<void>;
-  // Backups
+  // Backups & Backup Rules
   createBackup: (serverId: string, name?: string, type?: 'manual' | 'scheduled') => Promise<BackupRecord>;
   restoreBackup: (serverId: string, backupId: string) => Promise<void>;
   deleteBackup: (serverId: string, backupId: string) => void;
   togglePinBackup: (serverId: string, backupId: string) => void;
   updateBackupSchedule: (serverId: string, schedule: BackupSchedule) => void;
+  createBackupRule: (serverId: string, rule: Omit<BackupRule, 'id' | 'createdAt'>) => BackupRule;
+  updateBackupRule: (serverId: string, ruleId: string, updates: Partial<BackupRule>) => void;
+  deleteBackupRule: (serverId: string, ruleId: string) => void;
+  runBackupRule: (serverId: string, ruleId: string) => Promise<BackupRecord>;
+  setServerPublicIp: (serverId: string, publicIp: string) => void;
   // Players
   kickPlayer: (serverId: string, username: string, reason?: string) => void;
   banPlayer: (serverId: string, username: string, reason?: string) => void;
@@ -91,8 +97,22 @@ interface ServerContextType {
   }) => MinecraftServer;
   deleteServer: (serverId: string) => void;
   // Alerts
-  alerts: { id: string; serverId: string; title: string; message: string; date: string; type: 'info' | 'update' | 'warning' }[];
+  alerts: {
+    id: string;
+    serverId: string;
+    title: string;
+    message: string;
+    date: string;
+    type: 'info' | 'update' | 'warning';
+    targetTab?: 'updates' | 'mods' | 'players' | 'config' | 'backups';
+    targetAction?: 'review_whitelist' | 'update_loader' | 'view_mod';
+  }[];
   dismissAlert: (id: string) => void;
+  dismissAllAlerts: () => void;
+  // Downloads Monitor / Queue
+  downloads: import('../types/server').DownloadItem[];
+  addDownload: (item: Omit<import('../types/server').DownloadItem, 'id' | 'startedAt' | 'progressPercent'>) => string;
+  clearCompletedDownloads: () => void;
 }
 
 const INITIAL_SERVERS: MinecraftServer[] = [
@@ -367,6 +387,10 @@ const INITIAL_SERVERS: MinecraftServer[] = [
         type: 'scheduled',
         minecraftVersion: '1.21.4',
         loader: 'fabric',
+        ruleId: 'rule-full-smp',
+        ruleName: 'Full Server & Mods Snapshot',
+        destinationPath: 'D:/MinecraftBackups/Survival',
+        includedItems: ['world', 'world_nether', 'world_the_end', 'mods', 'config', 'server.properties', 'whitelist.json'],
         notes: 'Pre-nether expedition world save',
       },
       {
@@ -378,8 +402,37 @@ const INITIAL_SERVERS: MinecraftServer[] = [
         type: 'manual',
         minecraftVersion: '1.21.4',
         loader: 'fabric',
+        ruleId: 'rule-world-fast',
+        ruleName: 'World Regions Fast Snapshot',
+        destinationPath: '/Backups/Survival/Worlds',
+        includedItems: ['world', 'world_nether', 'world_the_end'],
       },
     ],
+    backupRules: [
+      {
+        id: 'rule-full-smp',
+        name: 'Full Server & Mods Snapshot',
+        destinationPath: 'D:/MinecraftBackups/Survival',
+        retentionCount: 8,
+        includedPaths: ['world', 'world_nether', 'world_the_end', 'mods', 'config', 'server.properties', 'whitelist.json'],
+        compressionLevel: 'normal',
+        notes: 'Primary backup profile covering all dimensions and mods.',
+        createdAt: '2024-12-01T00:00:00Z',
+        lastRunAt: '2024-12-28T00:00:00Z',
+      },
+      {
+        id: 'rule-world-fast',
+        name: 'World Regions Fast Snapshot',
+        destinationPath: '/Backups/Survival/Worlds',
+        retentionCount: 12,
+        includedPaths: ['world', 'world_nether', 'world_the_end'],
+        compressionLevel: 'fast',
+        notes: 'Frequent world terrain snapshots without heavy mod jars.',
+        createdAt: '2024-12-05T00:00:00Z',
+        lastRunAt: '2024-12-27T18:30:00Z',
+      },
+    ],
+    publicServerIp: 'play.craftyfleet.com',
     backupSchedule: {
       enabled: true,
       frequency: '6h',
@@ -742,6 +795,8 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     message: string;
     date: string;
     type: 'info' | 'update' | 'warning';
+    targetTab?: 'updates' | 'mods' | 'players' | 'config' | 'backups';
+    targetAction?: 'review_whitelist' | 'update_loader' | 'view_mod';
   }[]>([
     {
       id: 'alert-1',
@@ -750,8 +805,95 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       message: 'Fabric Loader 0.16.10 is available (current: 0.16.7). Includes chunk tick optimizations for 1.21.4.',
       date: 'Today',
       type: 'update',
+      targetTab: 'updates',
+      targetAction: 'update_loader',
+    },
+    {
+      id: 'alert-2',
+      serverId: 'srv-fabric-smp',
+      title: 'Unwhitelisted Player Join Attempt',
+      message: 'TechnoFan_99 (192.168.1.184) tried to connect to Survival Fabric SMP while whitelist is enforced.',
+      date: '5m ago',
+      type: 'warning',
+      targetTab: 'players',
+      targetAction: 'review_whitelist',
+    },
+    {
+      id: 'alert-3',
+      serverId: 'srv-fabric-smp',
+      title: 'Mod Update Available: FerriteCore',
+      message: 'FerriteCore has a compatible update on Modrinth for Fabric 1.21.4.',
+      date: 'Today',
+      type: 'update',
+      targetTab: 'mods',
+      targetAction: 'view_mod',
     },
   ]);
+
+  const [downloads, setDownloads] = useState<import('../types/server').DownloadItem[]>([
+    {
+      id: 'dl-seed-1',
+      serverId: 'srv-fabric-smp',
+      serverName: 'Survival Fabric SMP',
+      title: 'Fabric API',
+      filename: 'fabric-api-0.110.1+1.21.4.jar',
+      progressPercent: 100,
+      status: 'completed',
+      totalSizeBytes: 2450000,
+      speedMbps: 48.2,
+      type: 'mod',
+      startedAt: '10 mins ago',
+      completedAt: 'Just now',
+    },
+  ]);
+
+  const addDownload = (
+    item: Omit<import('../types/server').DownloadItem, 'id' | 'startedAt' | 'progressPercent'>
+  ): string => {
+    const id = `dl-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newDownload: import('../types/server').DownloadItem = {
+      ...item,
+      id,
+      progressPercent: 15,
+      startedAt: 'Just now',
+      speedMbps: Number((30 + Math.random() * 40).toFixed(1)),
+    };
+
+    setDownloads((prev) => [newDownload, ...prev]);
+
+    // Simulate progress to 100%
+    const interval = setInterval(() => {
+      setDownloads((prev) =>
+        prev.map((d) => {
+          if (d.id !== id) return d;
+          if (d.progressPercent >= 90) {
+            clearInterval(interval);
+            return {
+              ...d,
+              progressPercent: 100,
+              status: 'completed',
+              completedAt: 'Just now',
+            };
+          }
+          return {
+            ...d,
+            progressPercent: d.progressPercent + 25,
+            status: d.progressPercent + 25 >= 80 ? 'installing' : 'downloading',
+          };
+        })
+      );
+    }, 400);
+
+    return id;
+  };
+
+  const clearCompletedDownloads = () => {
+    setDownloads((prev) => prev.filter((d) => d.status !== 'completed'));
+  };
+
+  const dismissAllAlerts = () => {
+    setAlerts([]);
+  };
 
   const activeServer = servers.find((s) => s.id === activeServerId) || servers[0];
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1473,6 +1615,135 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
   };
 
+  const createBackupRule = (
+    serverId: string,
+    ruleData: Omit<BackupRule, 'id' | 'createdAt'>
+  ): BackupRule => {
+    const newRule: BackupRule = {
+      ...ruleData,
+      id: `rule-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          backupRules: [...(s.backupRules || []), newRule],
+        };
+      })
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'BackupRules',
+      message: `Configured new backup rule '${newRule.name}'. Destination: "${newRule.destinationPath}", Retention: ${newRule.retentionCount} backups.`,
+    });
+    return newRule;
+  };
+
+  const updateBackupRule = (
+    serverId: string,
+    ruleId: string,
+    updates: Partial<BackupRule>
+  ) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          backupRules: (s.backupRules || []).map((r) =>
+            r.id === ruleId ? { ...r, ...updates } : r
+          ),
+        };
+      })
+    );
+  };
+
+  const deleteBackupRule = (serverId: string, ruleId: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          backupRules: (s.backupRules || []).filter((r) => r.id !== ruleId),
+        };
+      })
+    );
+  };
+
+  const runBackupRule = async (serverId: string, ruleId: string): Promise<BackupRecord> => {
+    const srv = servers.find((s) => s.id === serverId);
+    const rule = srv?.backupRules?.find((r) => r.id === ruleId);
+    const ruleName = rule?.name || 'Manual Backup';
+    const destPath = rule?.destinationPath || wrapperSettings.backupsDirectory || '/Backups';
+    const included = rule?.includedPaths || ['world', 'config', 'server.properties'];
+    const retention = rule?.retentionCount || 10;
+    
+    const dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    const name = `${ruleName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${dateStr}`;
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'BackupRuleRunner',
+      message: `[Backup Rule: ${ruleName}] Executing archive job. Target directory: "${destPath}". Compressing (${included.join(', ')})...`,
+    });
+
+    const newBackup: BackupRecord = {
+      id: `bk-${Date.now()}`,
+      name,
+      createdAt: new Date().toISOString(),
+      sizeBytes: Math.floor(95000000 + Math.random() * 85000000),
+      isPinned: false,
+      type: 'manual',
+      minecraftVersion: srv?.minecraftVersion || '1.21.4',
+      loader: srv?.loader || 'fabric',
+      ruleId,
+      ruleName,
+      destinationPath: destPath,
+      includedItems: included,
+    };
+
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        const existingMatching = (s.backups || []).filter((b) => b.ruleId === ruleId && !b.isPinned);
+        let newBackups = [newBackup, ...s.backups];
+        if (existingMatching.length >= retention) {
+          const allowedMatchingIds = new Set(
+            [newBackup, ...existingMatching.slice(0, retention - 1)].map((b) => b.id)
+          );
+          newBackups = newBackups.filter(
+            (b) => b.ruleId !== ruleId || b.isPinned || allowedMatchingIds.has(b.id)
+          );
+        }
+        return {
+          ...s,
+          backups: newBackups,
+          backupRules: (s.backupRules || []).map((r) =>
+            r.id === ruleId ? { ...r, lastRunAt: new Date().toISOString() } : r
+          ),
+        };
+      })
+    );
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'BackupRuleRunner',
+      message: `[Backup Rule: ${ruleName}] Archive saved to "${destPath}/${name}.zip" (${(newBackup.sizeBytes / 1048576).toFixed(1)} MB). Retention enforced (${retention} max).`,
+    });
+
+    return newBackup;
+  };
+
+  const setServerPublicIp = (serverId: string, publicIp: string) => {
+    setServers((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, publicServerIp: publicIp.trim() || undefined } : s))
+    );
+  };
+
   // Players
   const kickPlayer = (serverId: string, username: string, reason?: string) => {
     setServers((prev) =>
@@ -1675,7 +1946,13 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         networkOutKb: 0,
         uptimeSeconds: 0,
       },
-      files: getDefaultServerFiles(newServerData.name, newServerData.port, newServerData.loader, []),
+      files: getDefaultServerFiles(
+        newServerData.name,
+        newServerData.port,
+        newServerData.loader,
+        [],
+        wrapperSettings.serversDirectory || '/Servers'
+      ),
     };
 
     setServers((prev) => [...prev, newServer]);
@@ -1844,6 +2121,10 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     return {
       autoAcceptEula: true,
+      publicIp: 'play.mmsm-network.net',
+      customWrapperLogoUrl: '',
+      serversDirectory: '/Servers',
+      backupsDirectory: '/Backups',
       defaultMinRamGb: 2,
       defaultMaxRamGb: 4,
       defaultJavaPath: '/usr/lib/jvm/temurin-21-jdk',
@@ -2234,6 +2515,11 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         deleteBackup,
         togglePinBackup,
         updateBackupSchedule,
+        createBackupRule,
+        updateBackupRule,
+        deleteBackupRule,
+        runBackupRule,
+        setServerPublicIp,
         kickPlayer,
         banPlayer,
         unbanPlayer,
@@ -2266,6 +2552,10 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         deleteServer,
         alerts,
         dismissAlert,
+        dismissAllAlerts,
+        downloads,
+        addDownload,
+        clearCompletedDownloads,
       }}
     >
       {children}

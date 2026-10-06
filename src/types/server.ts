@@ -54,6 +54,8 @@ export interface ScheduledTask {
   type: 'backup' | 'restart' | 'command' | 'broadcast' | 'sleep';
   cronOrInterval: string; // e.g. "Every 6 Hours", "Daily at 04:00 AM", "Every 30 Minutes"
   command?: string;
+  backupRuleId?: string;
+  backupRuleName?: string;
   enabled: boolean;
   lastRun?: string;
   nextRun?: string;
@@ -89,6 +91,18 @@ export interface JavaRuntime {
   isDefault?: boolean;
 }
 
+export interface BackupRule {
+  id: string;
+  name: string;
+  destinationPath: string; // e.g. "D:/MinecraftBackups/Survival" or "/Backups/Survival"
+  retentionCount: number;  // e.g. 8 (oldest pruned when exceeded)
+  includedPaths: string[]; // e.g. ['world', 'world_nether', 'world_the_end', 'mods', 'plugins', 'config', 'server.properties', 'whitelist.json']
+  compressionLevel: 'fast' | 'normal' | 'maximum';
+  notes?: string;
+  createdAt: string;
+  lastRunAt?: string;
+}
+
 export interface BackupRecord {
   id: string;
   name: string;
@@ -98,6 +112,10 @@ export interface BackupRecord {
   type: 'manual' | 'scheduled';
   minecraftVersion: string;
   loader: ServerLoader;
+  ruleId?: string;
+  ruleName?: string;
+  destinationPath?: string;
+  includedItems?: string[];
   notes?: string;
 }
 
@@ -193,11 +211,13 @@ export interface MinecraftServer {
   minRamMb: number;       // Min RAM (e.g. 2048)
   javaVersion: string;    // 'Java 21', 'Java 17', 'Java 8'
   port: number;
+  publicServerIp?: string; // Optional custom public connect IP/domain override for this server
   serverIconUrl?: string; // Custom 64x64 server-icon.png
   properties: ServerProperties;
   mods: InstalledMod[];
   players: Player[];
   backups: BackupRecord[];
+  backupRules?: BackupRule[];
   backupSchedule: BackupSchedule;
   telemetry: ServerTelemetry;
   files: ServerFile[];
@@ -232,8 +252,27 @@ export interface UserAccount {
   allowedServerIds?: string[]; // empty means all servers
 }
 
+export interface DownloadItem {
+  id: string;
+  serverId?: string;
+  serverName?: string;
+  title: string;
+  filename: string;
+  progressPercent: number;
+  status: 'downloading' | 'installing' | 'completed' | 'failed';
+  totalSizeBytes?: number;
+  speedMbps?: number;
+  type: 'mod' | 'plugin' | 'modpack' | 'server_creation' | 'backup';
+  startedAt: string;
+  completedAt?: string;
+}
+
 export interface WrapperSettings {
   autoAcceptEula: boolean;
+  publicIp?: string;
+  customWrapperLogoUrl?: string;
+  serversDirectory?: string;
+  backupsDirectory?: string;
   defaultMinRamGb: number;
   defaultMaxRamGb: number;
   defaultJavaPath: string;

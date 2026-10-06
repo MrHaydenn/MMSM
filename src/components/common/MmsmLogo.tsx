@@ -1,4 +1,5 @@
 import React from 'react';
+import { useServer } from '../../context/ServerContext';
 
 interface MmsmLogoProps {
   className?: string;
@@ -6,6 +7,23 @@ interface MmsmLogoProps {
 }
 
 export const MmsmLogo: React.FC<MmsmLogoProps> = ({ className = 'w-9 h-9', size = 36 }) => {
+  const { wrapperSettings } = useServer();
+
+  if (wrapperSettings?.customWrapperLogoUrl) {
+    return (
+      <div
+        className={`relative rounded-xl overflow-hidden shadow-lg border border-emerald-500/30 flex items-center justify-center shrink-0 select-none bg-zinc-900 ${className}`}
+        style={{ width: size, height: size }}
+      >
+        <img
+          src={wrapperSettings.customWrapperLogoUrl}
+          alt="Wrapper Logo"
+          className="w-full h-full object-cover"
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`relative rounded-xl overflow-hidden shadow-lg border border-emerald-500/30 flex items-center justify-center shrink-0 select-none ${className}`}

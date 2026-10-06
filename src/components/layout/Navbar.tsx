@@ -16,10 +16,17 @@ import {
   Settings,
   UserCheck,
   Moon,
+  DownloadCloud,
+  CheckCircle2,
+  Loader2,
+  Trash2,
+  ExternalLink,
+  ArrowRight,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
 import { MmsmLogo } from '../common/MmsmLogo';
+import { ActiveTab } from './Sidebar';
 
 interface NavbarProps {
   isServerSelected: boolean;
@@ -29,6 +36,7 @@ interface NavbarProps {
   onSelectServerFromNav?: (serverId: string) => void;
   onOpenProfileModal?: () => void;
   onOpenWrapperSettings?: () => void;
+  onNavigateToTab?: (serverId: string, tab: ActiveTab) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -39,6 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectServerFromNav,
   onOpenProfileModal,
   onOpenWrapperSettings,
+  onNavigateToTab,
 }) => {
   const {
     servers,
@@ -51,14 +60,21 @@ export const Navbar: React.FC<NavbarProps> = ({
     wakeServer,
     alerts,
     dismissAlert,
+    dismissAllAlerts,
+    downloads,
+    clearCompletedDownloads,
   } = useServer();
   const { currentUser, logout, canPerformAction } = useAuth();
 
   const [serverDropdownOpen, setServerDropdownOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [downloadsOpen, setDownloadsOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const runningCount = servers.filter((s) => s.status === 'online').length;
+  // Exclude archived servers from fleet count and online calculation
+  const nonArchivedServers = servers.filter((s) => !s.isArchived);
+  const runningCount = nonArchivedServers.filter((s) => s.status === 'online').length;
+  const activeDownloads = downloads.filter((d) => d.status === 'downloading' || d.status === 'installing');
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -261,17 +277,116 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="hidden md:flex items-center gap-3 text-xs font-mono text-zinc-400">
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>{runningCount} / {servers.length} Servers Online</span>
+            <span>{runningCount} / {nonArchivedServers.length} Servers Online</span>
           </span>
         </div>
       )}
 
-      {/* Right: Notifications & User Menu */}
-      <div className="flex items-center gap-3">
+      {/* Right: Downloads Monitor, Notifications & User Menu */}
+      <div className="flex items-center gap-2.5">
+        {/* Downloads Monitor */}
+        <div className="relative">
+          <button
+            onClick={() => {
+              setDownloadsOpen(!downloadsOpen);
+              setAlertsOpen(false);
+            }}
+            className={`relative p-2 rounded-lg border transition-colors cursor-pointer ${
+              activeDownloads.length > 0
+                ? 'bg-emerald-950/70 border-emerald-500/60 text-emerald-400 animate-pulse'
+                : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-300'
+            }`}
+            title="Downloads & Installation Monitor"
+          >
+            {activeDownloads.length > 0 ? (
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+            ) : (
+              <DownloadCloud className="w-4 h-4" />
+            )}
+            {activeDownloads.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-[9px] font-bold text-black flex items-center justify-center">
+                {activeDownloads.length}
+              </span>
+            )}
+          </button>
+
+          {downloadsOpen && (
+            <div className="absolute right-0 top-full mt-2 w-84 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-2 z-50">
+              <div className="px-2.5 py-1.5 text-xs font-semibold text-zinc-200 flex items-center justify-between border-b border-zinc-800">
+                <span className="flex items-center gap-1.5 font-bold text-zinc-100">
+                  <DownloadCloud className="w-4 h-4 text-emerald-400" />
+                  <span>Downloads & Install Tasks</span>
+                </span>
+                {downloads.length > 0 && (
+                  <button
+                    onClick={clearCompletedDownloads}
+                    className="text-[10px] text-zinc-400 hover:text-zinc-200 cursor-pointer font-mono"
+                  >
+                    Clear finished
+                  </button>
+                )}
+              </div>
+
+              <div className="py-1 max-h-72 overflow-y-auto space-y-1.5">
+                {downloads.length === 0 ? (
+                  <p className="text-xs text-zinc-500 py-4 text-center">No active or recent downloads</p>
+                ) : (
+                  downloads.map((dl) => (
+                    <div
+                      key={dl.id}
+                      className="p-2.5 rounded-lg bg-zinc-800/40 border border-zinc-800 text-xs space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-zinc-100 truncate max-w-[190px]">
+                          {dl.title}
+                        </span>
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.2 rounded uppercase ${
+                            dl.status === 'completed'
+                              ? 'bg-emerald-950/70 text-emerald-400 border border-emerald-800/40'
+                              : 'bg-cyan-950/70 text-cyan-400 border border-cyan-800/40'
+                          }`}
+                        >
+                          {dl.status}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono">
+                        <span className="truncate max-w-[180px]">{dl.filename}</span>
+                        <span>{dl.progressPercent}%</span>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${
+                            dl.status === 'completed' ? 'bg-emerald-500' : 'bg-cyan-400'
+                          }`}
+                          style={{ width: `${dl.progressPercent}%` }}
+                        />
+                      </div>
+
+                      {dl.speedMbps && dl.status !== 'completed' && (
+                        <div className="text-[10px] text-zinc-500 font-mono flex items-center justify-between">
+                          <span>Speed: {dl.speedMbps} Mbps</span>
+                          <span>{dl.startedAt}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Alerts Bell */}
         <div className="relative">
           <button
-            onClick={() => setAlertsOpen(!alertsOpen)}
+            onClick={() => {
+              setAlertsOpen(!alertsOpen);
+              setDownloadsOpen(false);
+            }}
             className="relative p-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 transition-colors cursor-pointer"
           >
             <Bell className="w-4 h-4" />
@@ -283,32 +398,61 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           {alertsOpen && (
-            <div className="absolute right-0 top-full mt-2 w-80 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-2 z-50">
-              <div className="px-2 py-1.5 text-xs font-semibold text-zinc-300 flex items-center justify-between border-b border-zinc-800">
+            <div className="absolute right-0 top-full mt-2 w-84 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-2 z-50">
+              <div className="px-2.5 py-1.5 text-xs font-semibold text-zinc-300 flex items-center justify-between border-b border-zinc-800">
                 <span>System Notifications</span>
-                <span className="text-[10px] text-zinc-500 font-normal">{alerts.length} updates</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-zinc-500 font-normal">{alerts.length} updates</span>
+                  {alerts.length > 0 && (
+                    <button
+                      onClick={dismissAllAlerts}
+                      className="text-[10px] font-mono text-emerald-400 hover:underline cursor-pointer"
+                    >
+                      Dismiss all
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="py-1 max-h-72 overflow-y-auto space-y-1">
                 {alerts.length === 0 ? (
-                  <p className="text-xs text-zinc-500 py-3 text-center">No new notifications</p>
+                  <p className="text-xs text-zinc-500 py-4 text-center">No new notifications</p>
                 ) : (
                   alerts.map((al) => (
                     <div
                       key={al.id}
-                      className="p-2 rounded-lg bg-zinc-800/40 border border-zinc-800 text-xs space-y-1 relative"
+                      className="p-2.5 rounded-lg bg-zinc-800/40 border border-zinc-800 hover:border-zinc-700 text-xs space-y-1.5 relative transition-colors"
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-emerald-400">{al.title}</span>
                         <button
                           onClick={() => dismissAlert(al.id)}
-                          className="text-zinc-500 hover:text-zinc-300 text-[10px]"
+                          className="text-zinc-500 hover:text-zinc-300 text-[10px] cursor-pointer"
                         >
                           dismiss
                         </button>
                       </div>
                       <p className="text-[11px] text-zinc-300 leading-relaxed">{al.message}</p>
-                      <span className="text-[10px] text-zinc-500 block">{al.date}</span>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60">
+                        <span className="text-[10px] text-zinc-500">{al.date}</span>
+                        {al.targetTab && (
+                          <button
+                            onClick={() => {
+                              const tab = al.targetTab;
+                              dismissAlert(al.id);
+                              setAlertsOpen(false);
+                              if (onNavigateToTab && tab) {
+                                onNavigateToTab(al.serverId, tab as ActiveTab);
+                              }
+                            }}
+                            className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+                          >
+                            <span>Go to {al.targetTab}</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))
                 )}
@@ -332,8 +476,24 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setUserMenuOpen(!userMenuOpen)}
             className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-200 transition-colors cursor-pointer"
           >
-            <div className="w-6 h-6 rounded bg-emerald-800 flex items-center justify-center text-xs font-bold text-white uppercase">
-              {currentUser?.username.charAt(0) || 'U'}
+            <div className="w-6 h-6 rounded-md bg-zinc-800 border border-zinc-700/80 overflow-hidden flex items-center justify-center shrink-0">
+              {currentUser?.customAvatarUrl ? (
+                <img
+                  src={currentUser.customAvatarUrl}
+                  alt={currentUser.displayName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <img
+                  src={`https://mc-heads.net/avatar/${currentUser?.avatarSeed || currentUser?.username || 'Steve'}/32`}
+                  alt={currentUser?.displayName || 'User'}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src =
+                      'https://mc-heads.net/avatar/MHF_Steve/32';
+                  }}
+                />
+              )}
             </div>
             <div className="text-left hidden sm:block">
               <p className="text-xs font-medium leading-none">{currentUser?.displayName || 'User'}</p>

@@ -34,7 +34,7 @@ export const PlayerManager: React.FC = () => {
   } = useServer();
   const { canPerformAction } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'online' | 'whitelist' | 'requests' | 'banned'>('online');
+  const [activeTab, setActiveTab] = useState<'online' | 'offline' | 'all' | 'whitelist' | 'requests' | 'banned'>('online');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -52,12 +52,17 @@ export const PlayerManager: React.FC = () => {
   const whitelistRequests = activeServer.whitelistRequests || [];
 
   const onlinePlayers = players.filter((p) => p.online);
+  const offlinePlayers = players.filter((p) => !p.online);
   const whitelistedPlayers = players.filter((p) => p.isWhitelisted);
   const bannedPlayers = players.filter((p) => p.isBanned);
 
   const displayedPlayers = (
     activeTab === 'online'
       ? onlinePlayers
+      : activeTab === 'offline'
+      ? offlinePlayers
+      : activeTab === 'all'
+      ? players
       : activeTab === 'whitelist'
       ? whitelistedPlayers
       : bannedPlayers
@@ -125,22 +130,42 @@ export const PlayerManager: React.FC = () => {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
+        <div className="flex flex-wrap items-center gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
           <button
             onClick={() => setActiveTab('online')}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
               activeTab === 'online'
-                ? 'bg-zinc-800 text-emerald-400 shadow-sm'
+                ? 'bg-zinc-800 text-emerald-400 shadow-sm font-semibold'
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            Online Now ({onlinePlayers.length})
+            Online ({onlinePlayers.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('offline')}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              activeTab === 'offline'
+                ? 'bg-zinc-800 text-amber-400 shadow-sm font-semibold'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            Offline ({offlinePlayers.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              activeTab === 'all'
+                ? 'bg-zinc-800 text-cyan-400 shadow-sm font-semibold'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            All Players ({players.length})
           </button>
           <button
             onClick={() => setActiveTab('whitelist')}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
               activeTab === 'whitelist'
-                ? 'bg-zinc-800 text-emerald-400 shadow-sm'
+                ? 'bg-zinc-800 text-emerald-400 shadow-sm font-semibold'
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -148,7 +173,7 @@ export const PlayerManager: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('requests')}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'requests'
                 ? 'bg-zinc-800 text-amber-300 font-semibold shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200'
@@ -163,9 +188,9 @@ export const PlayerManager: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('banned')}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
               activeTab === 'banned'
-                ? 'bg-zinc-800 text-rose-400 shadow-sm'
+                ? 'bg-zinc-800 text-rose-400 shadow-sm font-semibold'
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -317,6 +342,10 @@ export const PlayerManager: React.FC = () => {
           <p className="text-zinc-300 font-semibold text-sm">
             {activeTab === 'online'
               ? 'No players currently online'
+              : activeTab === 'offline'
+              ? 'No offline players recorded in roster'
+              : activeTab === 'all'
+              ? 'No player history recorded yet'
               : activeTab === 'whitelist'
               ? 'Whitelist is currently empty'
               : 'No banned players'}
@@ -324,7 +353,11 @@ export const PlayerManager: React.FC = () => {
           <p className="text-xs text-zinc-500">
             {activeTab === 'online'
               ? 'Start the server or wait for players to join via port ' + activeServer.port
-              : 'Add trusted players to restrict access.'}
+              : activeTab === 'offline'
+              ? 'Players who disconnect from the server will appear here in the offline roster.'
+              : activeTab === 'whitelist'
+              ? 'Add trusted players to restrict server access.'
+              : 'All players who join the server are automatically indexed.'}
           </p>
         </div>
       ) : (
@@ -364,6 +397,17 @@ export const PlayerManager: React.FC = () => {
                       {player.username}
                     </h3>
 
+                    {player.online ? (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-800/50 text-emerald-400 font-semibold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Online
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700/60 text-zinc-400 font-semibold">
+                        Offline
+                      </span>
+                    )}
+
                     {player.isOp && (
                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-950/70 border border-purple-800/50 text-purple-300 font-semibold flex items-center gap-1">
                         <Shield className="w-2.5 h-2.5" />
@@ -379,7 +423,7 @@ export const PlayerManager: React.FC = () => {
                   </div>
 
                   <p className="text-[11px] text-zinc-500 font-mono truncate">
-                    UUID: {player.uuid.substring(0, 8)}...
+                    {player.online ? `IP: ${player.ipAddress}` : `Last seen: ${player.lastSeen || 'Recently'}`} · UUID: {player.uuid.substring(0, 8)}...
                   </p>
 
                   <div className="flex items-center gap-3 text-[11px] text-zinc-400 font-mono">

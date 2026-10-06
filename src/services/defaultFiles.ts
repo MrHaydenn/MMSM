@@ -4,9 +4,11 @@ export function getDefaultServerFiles(
   serverName: string,
   port: number,
   loader: string,
-  mods: InstalledMod[] = []
+  mods: InstalledMod[] = [],
+  baseDir: string = '/Servers'
 ): ServerFile[] {
-  const root = `/Servers/${serverName}`;
+  const normalizedBase = baseDir.replace(/\/+$/, '') || '/Servers';
+  const root = `${normalizedBase}/${serverName}`;
   const now = '2024-12-28 12:00:00';
 
   const modFiles: ServerFile[] = mods.map((m) => ({
@@ -23,8 +25,8 @@ export function getDefaultServerFiles(
   return [
     {
       id: 'd-servers-root',
-      name: 'Servers',
-      path: '/Servers',
+      name: normalizedBase.replace(/^\//, '') || 'Servers',
+      path: normalizedBase,
       isDirectory: true,
       sizeBytes: 0,
       lastModified: now,

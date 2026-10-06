@@ -267,9 +267,27 @@ export interface DownloadItem {
   completedAt?: string;
 }
 
+export interface GitHubUpdateInfo {
+  currentVersion: string;
+  latestVersion: string;
+  hasUpdate: boolean;
+  repoUrl: string;
+  releaseTitle?: string;
+  releaseNotes?: string;
+  publishedAt?: string;
+  autoCheckEnabled: boolean;
+  autoShutdownServersOnUpdate: boolean;
+  autoRestartServersAfterUpdate: boolean;
+  lastCheckedAt?: string;
+}
+
 export interface WrapperSettings {
   autoAcceptEula: boolean;
   publicIp?: string;
+  wrapperWebPort: number; // Port used to access the Web GUI (e.g. 3000 or 8080)
+  wrapperBindHost: '0.0.0.0' | '127.0.0.1'; // 0.0.0.0 for LAN/WAN access, 127.0.0.1 for local only
+  enableHttps: boolean;
+  httpsPort?: number;
   customWrapperLogoUrl?: string;
   serversDirectory?: string;
   backupsDirectory?: string;
@@ -281,6 +299,7 @@ export interface WrapperSettings {
   telemetryIntervalMs: number;
   enableAnonymousTelemetry: boolean;
   javaRuntimes?: JavaRuntime[];
+  githubUpdate: GitHubUpdateInfo;
 }
 
 export interface ModrinthSearchResult {

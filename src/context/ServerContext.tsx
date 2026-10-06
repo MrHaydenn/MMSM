@@ -113,6 +113,11 @@ interface ServerContextType {
   downloads: import('../types/server').DownloadItem[];
   addDownload: (item: Omit<import('../types/server').DownloadItem, 'id' | 'startedAt' | 'progressPercent'>) => string;
   clearCompletedDownloads: () => void;
+  // GitHub Auto Update
+  checkForGitHubUpdate: () => Promise<boolean>;
+  performGitHubUpdate: () => Promise<void>;
+  isUpdatingWrapper: boolean;
+  updateProgressStep: string;
 }
 
 const INITIAL_SERVERS: MinecraftServer[] = [
@@ -2116,12 +2121,37 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.portRangeStart) return parsed;
+        if (parsed.portRangeStart) {
+          return {
+            wrapperWebPort: 3000,
+            wrapperBindHost: '0.0.0.0',
+            enableHttps: false,
+            httpsPort: 3443,
+            githubUpdate: {
+              currentVersion: 'v2.5.0',
+              latestVersion: 'v2.6.0',
+              hasUpdate: true,
+              repoUrl: 'https://github.com/MrHaydenn/mmsm-minecraft-server-manager',
+              releaseTitle: 'MMSM v2.6.0: Automated Backups, Offline Players & Dynamic Core Loaders',
+              releaseNotes: '• Dynamic Loader API selector (Forge, NeoForge, Fabric, Quilt, Paper, Purpur, Velocity)\n• Backup Rules with secondary drive support & retention pruning\n• Offline Player Roster & Moderation\n• Multi-Interface Network Settings & Host Binding\n• Self-Contained Standalone Launchers (.bat, .ps1, .sh)',
+              publishedAt: '2 hours ago',
+              autoCheckEnabled: true,
+              autoShutdownServersOnUpdate: true,
+              autoRestartServersAfterUpdate: true,
+              lastCheckedAt: 'Today at 10:30 AM',
+            },
+            ...parsed,
+          };
+        }
       } catch {}
     }
     return {
       autoAcceptEula: true,
       publicIp: 'play.mmsm-network.net',
+      wrapperWebPort: 3000,
+      wrapperBindHost: '0.0.0.0',
+      enableHttps: false,
+      httpsPort: 3443,
       customWrapperLogoUrl: '',
       serversDirectory: '/Servers',
       backupsDirectory: '/Backups',
@@ -2132,6 +2162,19 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       portRangeEnd: 25569,
       telemetryIntervalMs: 2500,
       enableAnonymousTelemetry: false,
+      githubUpdate: {
+        currentVersion: 'v2.5.0',
+        latestVersion: 'v2.6.0',
+        hasUpdate: true,
+        repoUrl: 'https://github.com/MrHaydenn/mmsm-minecraft-server-manager',
+        releaseTitle: 'MMSM v2.6.0: Automated Backups, Offline Players & Dynamic Core Loaders',
+        releaseNotes: '• Dynamic Loader API selector (Forge, NeoForge, Fabric, Quilt, Paper, Purpur, Velocity)\n• Backup Rules with secondary drive support & retention pruning\n• Offline Player Roster & Moderation\n• Multi-Interface Network Settings & Host Binding\n• Self-Contained Standalone Launchers (.bat, .ps1, .sh)',
+        publishedAt: '2 hours ago',
+        autoCheckEnabled: true,
+        autoShutdownServersOnUpdate: true,
+        autoRestartServersAfterUpdate: true,
+        lastCheckedAt: 'Today at 10:30 AM',
+      },
       javaRuntimes: [
         {
           id: 'java-21',
@@ -2482,6 +2525,113 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
   };
 
+  const [isUpdatingWrapper, setIsUpdatingWrapper] = useState<boolean>(false);
+  const [updateProgressStep, setUpdateProgressStep] = useState<string>('');
+
+  const checkForGitHubUpdate = async (): Promise<boolean> => {
+    // Simulate remote release query
+    await new Promise((res) => setTimeout(res, 800));
+    const hasNewRelease = true;
+    setWrapperSettings((prev) => ({
+      ...prev,
+      githubUpdate: {
+        ...prev.githubUpdate,
+        hasUpdate: hasNewRelease,
+        latestVersion: 'v2.6.0',
+        lastCheckedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    }));
+
+    if (hasNewRelease) {
+      setAlerts((prev) => [
+        {
+          id: `alert-update-${Date.now()}`,
+          serverId: activeServer.id,
+          title: 'MMSM Launcher Update Available (v2.6.0)',
+          message: 'A new version of MMSM is available on GitHub with automatic backup rules & core loader improvements.',
+          date: 'Just now',
+          type: 'update',
+          targetTab: 'updates',
+        },
+        ...prev,
+      ]);
+    }
+    return hasNewRelease;
+  };
+
+  const performGitHubUpdate = async () => {
+    setIsUpdatingWrapper(true);
+
+    try {
+      // 1. Identify running servers
+      setUpdateProgressStep('Inspecting fleet status & notifying connected players...');
+      const runningServers = servers.filter((s) => s.status === 'online' || s.status === 'starting');
+      await new Promise((res) => setTimeout(res, 900));
+
+      // 2. Shut down running servers gracefully
+      if (runningServers.length > 0 && wrapperSettings.githubUpdate.autoShutdownServersOnUpdate) {
+        setUpdateProgressStep(`Gracefully shutting down ${runningServers.length} active server(s)...`);
+        for (const srv of runningServers) {
+          addLog(srv.id, {
+            timestamp: getTimestamp(),
+            level: 'WARN',
+            thread: 'System',
+            message: '[MMSM Auto-Update] Broadcast to players: Server shutting down for launcher software update.',
+          });
+          executeCommand('say §c[MMSM] Server is shutting down for automated launcher upgrade in 5 seconds...', srv.id);
+          stopServer(srv.id);
+        }
+        await new Promise((res) => setTimeout(res, 1800));
+      }
+
+      // 3. Download package
+      setUpdateProgressStep('Downloading update v2.6.0 release payload from GitHub...');
+      addDownload({
+        title: 'MMSM Launcher Core Update v2.6.0',
+        filename: 'mmsm-release-v2.6.0.zip',
+        status: 'downloading',
+        type: 'server_creation',
+        totalSizeBytes: 24800000,
+        speedMbps: 68.4,
+      });
+      await new Promise((res) => setTimeout(res, 1600));
+
+      // 4. Extract & replace
+      setUpdateProgressStep('Unpacking binaries, applying database migrations & updating components...');
+      await new Promise((res) => setTimeout(res, 1400));
+
+      // 5. Restart services
+      setUpdateProgressStep('Restarting MMSM wrapper host services & re-binding ports...');
+      await new Promise((res) => setTimeout(res, 1200));
+
+      // 6. Update local version state
+      setWrapperSettings((prev) => ({
+        ...prev,
+        githubUpdate: {
+          ...prev.githubUpdate,
+          currentVersion: 'v2.6.0',
+          hasUpdate: false,
+          lastCheckedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      }));
+
+      // 7. Auto restart previously running servers if desired
+      if (runningServers.length > 0 && wrapperSettings.githubUpdate.autoRestartServersAfterUpdate) {
+        setUpdateProgressStep('Auto-restarting previously online servers...');
+        for (const srv of runningServers) {
+          await startServer(srv.id);
+        }
+        await new Promise((res) => setTimeout(res, 800));
+      }
+
+      setUpdateProgressStep('Update complete! MMSM is now running v2.6.0.');
+      await new Promise((res) => setTimeout(res, 1000));
+    } finally {
+      setIsUpdatingWrapper(false);
+      setUpdateProgressStep('');
+    }
+  };
+
   const downloadJavaRuntime = async (runtimeId: string) => {
     setWrapperSettings((prev) => ({
       ...prev,
@@ -2556,6 +2706,10 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         downloads,
         addDownload,
         clearCompletedDownloads,
+        checkForGitHubUpdate,
+        performGitHubUpdate,
+        isUpdatingWrapper,
+        updateProgressStep,
       }}
     >
       {children}

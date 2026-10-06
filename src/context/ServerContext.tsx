@@ -1,0 +1,2282 @@
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import {
+  MinecraftServer,
+  ServerLog,
+  InstalledMod,
+  Player,
+  BackupRecord,
+  BackupSchedule,
+  ServerProperties,
+  ServerStatus,
+  ServerLoader,
+  ServerFile,
+} from '../types/server';
+import { checkModUpdate } from '../services/modrinthApi';
+import { getLatestLoaderVersion } from '../services/loadersApi';
+import { getDefaultServerFiles } from '../services/defaultFiles';
+
+interface ServerContextType {
+  servers: MinecraftServer[];
+  activeServer: MinecraftServer;
+  setActiveServerId: (id: string) => void;
+  serverLogs: Record<string, ServerLog[]>;
+  startServer: (id?: string) => Promise<void>;
+  stopServer: (id?: string) => Promise<void>;
+  restartServer: (id?: string) => Promise<void>;
+  killServer: (id?: string) => Promise<void>;
+  executeCommand: (cmd: string, serverId?: string) => void;
+  clearLogs: (serverId?: string) => void;
+  // Mod actions
+  installMod: (serverId: string, mod: InstalledMod) => void;
+  toggleMod: (serverId: string, modId: string) => void;
+  updateMod: (serverId: string, modId: string, newVersionNumber: string, newVersionId: string) => void;
+  removeMod: (serverId: string, modId: string) => void;
+  checkModUpdatesForServer: (serverId: string) => Promise<number>;
+  // Loader update
+  upgradeLoader: (serverId: string) => Promise<void>;
+  // Backups
+  createBackup: (serverId: string, name?: string, type?: 'manual' | 'scheduled') => Promise<BackupRecord>;
+  restoreBackup: (serverId: string, backupId: string) => Promise<void>;
+  deleteBackup: (serverId: string, backupId: string) => void;
+  togglePinBackup: (serverId: string, backupId: string) => void;
+  updateBackupSchedule: (serverId: string, schedule: BackupSchedule) => void;
+  // Players
+  kickPlayer: (serverId: string, username: string, reason?: string) => void;
+  banPlayer: (serverId: string, username: string, reason?: string) => void;
+  unbanPlayer: (serverId: string, username: string) => void;
+  togglePlayerOp: (serverId: string, username: string) => void;
+  togglePlayerWhitelist: (serverId: string, username: string) => void;
+  // File actions
+  saveFile: (serverId: string, path: string, content: string) => void;
+  createFile: (serverId: string, path: string, isDirectory: boolean, content?: string) => void;
+  deleteFile: (serverId: string, path: string) => void;
+  renameFile: (serverId: string, oldPath: string, newName: string) => void;
+  // Archive & Fleet actions
+  archiveServer: (serverId: string) => void;
+  unarchiveServer: (serverId: string) => void;
+  setServerRam: (serverId: string, minRamMb: number, maxRamMb: number) => void;
+  uploadModFile: (serverId: string, fileName: string, fileBytes: number) => void;
+  changeLoader: (serverId: string, newLoader: ServerLoader, newLoaderVersion: string, newMcVersion?: string) => void;
+  // Server Icon
+  updateServerIcon: (serverId: string, iconUrl: string) => void;
+  // Sleep Mode (AMP-style hibernation)
+  toggleSleepMode: (serverId: string, enabled: boolean, inactivityMinutes?: number) => void;
+  wakeServer: (serverId: string) => Promise<void>;
+  putServerToSleep: (serverId: string) => void;
+  // Whitelist Requests
+  approveWhitelistRequest: (serverId: string, requestId: string) => void;
+  denyWhitelistRequest: (serverId: string, requestId: string) => void;
+  // Scheduled Tasks
+  addScheduledTask: (serverId: string, task: Omit<import('../types/server').ScheduledTask, 'id'>) => void;
+  toggleScheduledTask: (serverId: string, taskId: string) => void;
+  deleteScheduledTask: (serverId: string, taskId: string) => void;
+  runScheduledTaskNow: (serverId: string, taskId: string) => void;
+  // Java Runtime instances
+  downloadJavaRuntime: (runtimeId: string) => Promise<void>;
+  // Wrapper Settings
+  wrapperSettings: import('../types/server').WrapperSettings;
+  updateWrapperSettings: (settings: Partial<import('../types/server').WrapperSettings>) => void;
+  // Server Config & Lifecycle
+  updateProperties: (serverId: string, props: Partial<ServerProperties>) => void;
+  createServer: (newServerData: {
+    name: string;
+    description: string;
+    loader: ServerLoader;
+    loaderVersion: string;
+    minecraftVersion: string;
+    minRamMb?: number;
+    ramMb: number;
+    port: number;
+    modpackId?: string;
+  }) => MinecraftServer;
+  deleteServer: (serverId: string) => void;
+  // Alerts
+  alerts: { id: string; serverId: string; title: string; message: string; date: string; type: 'info' | 'update' | 'warning' }[];
+  dismissAlert: (id: string) => void;
+}
+
+const INITIAL_SERVERS: MinecraftServer[] = [
+  {
+    id: 'srv-fabric-smp',
+    name: 'Survival Fabric SMP',
+    description: 'High-performance community survival server with Fabric optimizations & voice chat.',
+    status: 'online',
+    loader: 'fabric',
+    loaderVersion: '0.16.7',
+    latestAvailableLoaderVersion: '0.16.10',
+    minecraftVersion: '1.21.4',
+    latestAvailableMcVersion: '1.21.4',
+    hasLoaderUpdate: true,
+    allocatedRamMb: 6144,
+    minRamMb: 2048,
+    javaVersion: 'Java 21 (Temurin-21.0.4)',
+    port: 25565,
+    serverIconUrl: 'https://api.iconify.design/pixelarticons:sword.svg',
+    sleepModeEnabled: true,
+    sleepInactivityMinutes: 15,
+    isSleeping: false,
+    whitelistRequests: [
+      {
+        id: 'req-1',
+        username: 'TechnoFan_99',
+        timestamp: '5 minutes ago',
+        ip: '192.168.1.184',
+        reason: 'Friend of Notch from Discord community',
+        avatarUrl: 'https://mc-heads.net/avatar/TechnoFan_99/48',
+      },
+      {
+        id: 'req-2',
+        username: 'DiamondMiner42',
+        timestamp: '22 minutes ago',
+        ip: '10.0.0.45',
+        reason: 'Joined via subreddit link',
+        avatarUrl: 'https://mc-heads.net/avatar/DiamondMiner42/48',
+      },
+    ],
+    scheduledTasks: [
+      {
+        id: 'task-1',
+        name: 'Nightly World Backup',
+        type: 'backup',
+        cronOrInterval: 'Every 6 Hours',
+        enabled: true,
+        lastRun: '4 hours ago',
+        nextRun: 'in 2 hours',
+      },
+      {
+        id: 'task-2',
+        name: 'Auto-Restart & RAM Flush',
+        type: 'restart',
+        cronOrInterval: 'Daily at 04:00 AM',
+        enabled: true,
+        lastRun: 'Yesterday at 04:00',
+        nextRun: 'Tomorrow at 04:00',
+      },
+      {
+        id: 'task-3',
+        name: 'Broadcast Rules Notice',
+        type: 'command',
+        command: 'say Remember to follow server etiquette and report griefing to operators.',
+        cronOrInterval: 'Every 30 Minutes',
+        enabled: true,
+        lastRun: '12 mins ago',
+        nextRun: 'in 18 mins',
+      },
+    ],
+    playerSessions: [
+      {
+        id: 'sess-1',
+        username: 'Notch',
+        joinedAt: 'Today 10:02',
+        leftAt: 'Active',
+        durationMinutes: 180,
+        dimension: 'Overworld',
+        peakPing: 28,
+      },
+      {
+        id: 'sess-2',
+        username: 'jeb_',
+        joinedAt: 'Today 10:04',
+        leftAt: 'Active',
+        durationMinutes: 178,
+        dimension: 'Nether',
+        peakPing: 34,
+      },
+      {
+        id: 'sess-3',
+        username: 'Alex',
+        joinedAt: 'Yesterday 14:20',
+        leftAt: 'Yesterday 18:45',
+        durationMinutes: 265,
+        dimension: 'Overworld',
+        peakPing: 42,
+      },
+      {
+        id: 'sess-4',
+        username: 'Steve',
+        joinedAt: 'Yesterday 09:12',
+        leftAt: 'Yesterday 11:30',
+        durationMinutes: 138,
+        dimension: 'The End',
+        peakPing: 22,
+      },
+    ],
+    analyticsHistory: [
+      { timestamp: '10:00', tps: 20.0, cpuPercent: 12.4, ramMb: 3100, onlinePlayers: 2, networkMbps: 1.8 },
+      { timestamp: '11:00', tps: 19.9, cpuPercent: 16.2, ramMb: 3250, onlinePlayers: 3, networkMbps: 2.4 },
+      { timestamp: '12:00', tps: 20.0, cpuPercent: 21.0, ramMb: 3400, onlinePlayers: 4, networkMbps: 3.1 },
+      { timestamp: '13:00', tps: 19.8, cpuPercent: 24.5, ramMb: 3600, onlinePlayers: 5, networkMbps: 4.2 },
+      { timestamp: '14:00', tps: 20.0, cpuPercent: 18.2, ramMb: 3450, onlinePlayers: 3, networkMbps: 2.8 },
+      { timestamp: '15:00', tps: 20.0, cpuPercent: 14.8, ramMb: 3410, onlinePlayers: 2, networkMbps: 2.1 },
+    ],
+    createdAt: '2024-11-10T10:00:00Z',
+    uptimeStartedAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+    properties: {
+      serverName: 'Survival Fabric SMP',
+      motd: '§aCraftyForge §7SMP §8| §e1.21.4 §b[Modded Performance]',
+      serverPort: 25565,
+      maxPlayers: 20,
+      difficulty: 'hard',
+      gamemode: 'survival',
+      pvp: true,
+      allowFlight: false,
+      viewDistance: 12,
+      simulationDistance: 8,
+      onlineMode: true,
+      spawnProtection: 16,
+      hardcore: false,
+      whiteList: false,
+      enableRcon: true,
+      rconPort: 25575,
+    },
+    mods: [
+      {
+        id: 'P7dR8mSH',
+        name: 'Fabric API',
+        slug: 'fabric-api',
+        filename: 'fabric-api-0.110.1+1.21.4.jar',
+        installedVersionId: 'v-fab-1',
+        installedVersionNumber: '0.110.1+1.21.4',
+        enabled: true,
+        fileSizeBytes: 2450000,
+        summary: 'Essential hooks and compatibility layer for mods using the Fabric loader.',
+        author: 'FabricMC',
+        loaders: ['fabric'],
+        gameVersions: ['1.21.4'],
+        installedAt: '2024-12-05T10:00:00Z',
+        iconUrl: 'https://cdn.modrinth.com/data/P7dR8mSH/icon.png',
+      },
+      {
+        id: 'gvQqBUqZ',
+        name: 'Lithium',
+        slug: 'lithium',
+        filename: 'lithium-fabric-0.14.7-mc1.21.4.jar',
+        installedVersionId: 'v-lit-1',
+        installedVersionNumber: '0.14.7',
+        enabled: true,
+        fileSizeBytes: 1820000,
+        summary: 'General-purpose optimization mod for Minecraft boosting TPS and physics processing.',
+        author: 'jellysquid3',
+        loaders: ['fabric'],
+        gameVersions: ['1.21.4'],
+        installedAt: '2024-12-05T10:00:00Z',
+        iconUrl: 'https://cdn.modrinth.com/data/gvQqBUqZ/icon.png',
+      },
+      {
+        id: 'u6dsqVyZ',
+        name: 'FerriteCore',
+        slug: 'ferrite-core',
+        filename: 'ferritecore-7.0.0-fabric.jar',
+        installedVersionId: 'v-fc-1',
+        installedVersionNumber: '7.0.0',
+        enabled: true,
+        fileSizeBytes: 620000,
+        summary: 'Memory usage optimizations for Minecraft reducing RAM by up to 40%.',
+        author: 'malte0811',
+        loaders: ['fabric'],
+        gameVersions: ['1.21.4'],
+        installedAt: '2024-12-06T14:00:00Z',
+        iconUrl: 'https://cdn.modrinth.com/data/u6dsqVyZ/icon.png',
+      },
+      {
+        id: 'nk8j3m9o',
+        name: 'Chunky',
+        slug: 'chunky',
+        filename: 'Chunky-1.4.28.jar',
+        installedVersionId: 'v-chu-1',
+        installedVersionNumber: '1.4.28',
+        enabled: true,
+        fileSizeBytes: 410000,
+        summary: 'Pre-generates chunks rapidly to reduce server lag during exploration.',
+        author: 'pop4959',
+        loaders: ['fabric'],
+        gameVersions: ['1.21.4'],
+        installedAt: '2024-12-07T12:00:00Z',
+        iconUrl: 'https://cdn.modrinth.com/data/fALzjRMS/icon.png',
+      },
+    ],
+    players: [
+      {
+        uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5',
+        username: 'Notch',
+        isOp: true,
+        isWhitelisted: true,
+        online: true,
+        pingMs: 24,
+        playtimeMinutes: 1420,
+        lastSeen: 'Now',
+        ipAddress: '192.168.1.102',
+        coords: { x: 124, y: 71, z: -350, dimension: 'overworld' },
+        health: 20,
+        food: 18,
+        gameMode: 'survival',
+      },
+      {
+        uuid: '853c80ef-3c37-49fd-aa49-938b674adae6',
+        username: 'jeb_',
+        isOp: true,
+        isWhitelisted: true,
+        online: true,
+        pingMs: 42,
+        playtimeMinutes: 980,
+        lastSeen: 'Now',
+        ipAddress: '192.168.1.115',
+        coords: { x: -45, y: 64, z: 210, dimension: 'overworld' },
+        health: 19,
+        food: 20,
+        gameMode: 'survival',
+      },
+      {
+        uuid: 'ec561538-f3fd-461d-aff5-086364e5c52c',
+        username: 'Alex',
+        isOp: false,
+        isWhitelisted: true,
+        online: true,
+        pingMs: 18,
+        playtimeMinutes: 2400,
+        lastSeen: 'Now',
+        ipAddress: '192.168.1.84',
+        coords: { x: 890, y: 68, z: 12, dimension: 'nether' },
+        health: 14,
+        food: 16,
+        gameMode: 'survival',
+      },
+      {
+        uuid: 'd8d83556-93b4-4e18-912a-0498b8398a69',
+        username: 'Steve',
+        isOp: false,
+        isWhitelisted: true,
+        online: false,
+        pingMs: 0,
+        playtimeMinutes: 320,
+        lastSeen: '2 hours ago',
+        ipAddress: '192.168.1.99',
+        coords: { x: 10, y: 63, z: 5, dimension: 'overworld' },
+        health: 20,
+        food: 20,
+        gameMode: 'survival',
+      },
+    ],
+    backups: [
+      {
+        id: 'bk-1',
+        name: 'AutoBackup-20241228-0000',
+        createdAt: '2024-12-28T00:00:00Z',
+        sizeBytes: 154000000,
+        isPinned: true,
+        type: 'scheduled',
+        minecraftVersion: '1.21.4',
+        loader: 'fabric',
+        notes: 'Pre-nether expedition world save',
+      },
+      {
+        id: 'bk-2',
+        name: 'Manual-Before-Chunky-Gen',
+        createdAt: '2024-12-27T18:30:00Z',
+        sizeBytes: 148000000,
+        isPinned: false,
+        type: 'manual',
+        minecraftVersion: '1.21.4',
+        loader: 'fabric',
+      },
+    ],
+    backupSchedule: {
+      enabled: true,
+      frequency: '6h',
+      maxKeepBackups: 8,
+      includeMods: true,
+      lastRunAt: '2024-12-28T00:00:00Z',
+      nextRunAt: '2024-12-28T06:00:00Z',
+    },
+    telemetry: {
+      cpuPercent: 14.8,
+      ramUsedMb: 3410,
+      ramMaxMb: 6144,
+      tps: 20.0,
+      tickTimeMs: 12.4,
+      diskUsedMb: 1250,
+      diskTotalMb: 50000,
+      networkInKb: 84.2,
+      networkOutKb: 218.4,
+      uptimeSeconds: 172800,
+    },
+    files: getDefaultServerFiles('Survival Fabric SMP', 25565, 'fabric', [
+      {
+        id: 'P7dR8mSH',
+        name: 'Fabric API',
+        slug: 'fabric-api',
+        filename: 'fabric-api-0.110.1+1.21.4.jar',
+        installedVersionId: 'v-fab-1',
+        installedVersionNumber: '0.110.1+1.21.4',
+        enabled: true,
+        fileSizeBytes: 2450000,
+        summary: 'Essential hooks and compatibility layer for mods using the Fabric loader.',
+        author: 'FabricMC',
+        loaders: ['fabric'],
+        gameVersions: ['1.21.4'],
+        installedAt: '2024-12-05T10:00:00Z',
+      },
+      {
+        id: 'gvQqBUqZ',
+        name: 'Lithium',
+        slug: 'lithium',
+        filename: 'lithium-fabric-0.14.7-mc1.21.4.jar',
+        installedVersionId: 'v-lit-1',
+        installedVersionNumber: '0.14.7',
+        enabled: true,
+        fileSizeBytes: 1820000,
+        summary: 'General-purpose optimization mod for Minecraft boosting TPS.',
+        author: 'jellysquid3',
+        loaders: ['fabric'],
+        gameVersions: ['1.21.4'],
+        installedAt: '2024-12-05T10:00:00Z',
+      },
+    ]),
+  },
+  {
+    id: 'srv-paper-lobby',
+    name: 'Paper Lobby & Hub',
+    description: 'High-concurrency PaperMC spigot hub server for player matchmaking and minigames.',
+    status: 'offline',
+    loader: 'paper',
+    loaderVersion: 'build #162',
+    latestAvailableLoaderVersion: 'build #168',
+    minecraftVersion: '1.21.4',
+    latestAvailableMcVersion: '1.21.4',
+    hasLoaderUpdate: true,
+    allocatedRamMb: 4096,
+    minRamMb: 2048,
+    javaVersion: 'Java 21 (Temurin-21.0.4)',
+    port: 25566,
+    createdAt: '2024-11-20T14:00:00Z',
+    properties: {
+      serverName: 'Paper Lobby & Hub',
+      motd: '§6CraftyForge §fNetwork §8| §bLobby 01',
+      serverPort: 25566,
+      maxPlayers: 50,
+      difficulty: 'peaceful',
+      gamemode: 'adventure',
+      pvp: false,
+      allowFlight: true,
+      viewDistance: 8,
+      simulationDistance: 6,
+      onlineMode: true,
+      spawnProtection: 0,
+      hardcore: false,
+      whiteList: false,
+      enableRcon: false,
+      rconPort: 25576,
+    },
+    mods: [],
+    players: [],
+    backups: [
+      {
+        id: 'bk-paper-1',
+        name: 'Lobby-Spawn-Schematic-Backup',
+        createdAt: '2024-12-20T11:00:00Z',
+        sizeBytes: 85000000,
+        isPinned: true,
+        type: 'manual',
+        minecraftVersion: '1.21.4',
+        loader: 'paper',
+      },
+    ],
+    backupSchedule: {
+      enabled: false,
+      frequency: '24h',
+      maxKeepBackups: 5,
+      includeMods: false,
+    },
+    telemetry: {
+      cpuPercent: 0,
+      ramUsedMb: 0,
+      ramMaxMb: 4096,
+      tps: 20.0,
+      tickTimeMs: 0,
+      diskUsedMb: 680,
+      diskTotalMb: 50000,
+      networkInKb: 0,
+      networkOutKb: 0,
+      uptimeSeconds: 0,
+    },
+    files: getDefaultServerFiles('Paper Lobby & Hub', 25566, 'paper', []),
+  },
+  {
+    id: 'srv-neoforge-tech',
+    name: 'NeoForge Tech Horizons',
+    description: 'Heavy modded tech server featuring machinery, electricity, and custom dimensions.',
+    status: 'online',
+    loader: 'neoforge',
+    loaderVersion: '21.1.95',
+    latestAvailableLoaderVersion: '21.1.95',
+    minecraftVersion: '1.21.1',
+    latestAvailableMcVersion: '1.21.4',
+    hasLoaderUpdate: false,
+    allocatedRamMb: 8192,
+    minRamMb: 4096,
+    javaVersion: 'Java 21 (Temurin-21.0.4)',
+    port: 25567,
+    createdAt: '2024-12-01T09:00:00Z',
+    uptimeStartedAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
+    properties: {
+      serverName: 'NeoForge Tech Horizons',
+      motd: '§dNeoForge §eTech Horizons §8| §cModded Tech World',
+      serverPort: 25567,
+      maxPlayers: 12,
+      difficulty: 'normal',
+      gamemode: 'survival',
+      pvp: true,
+      allowFlight: false,
+      viewDistance: 10,
+      simulationDistance: 8,
+      onlineMode: true,
+      spawnProtection: 16,
+      hardcore: false,
+      whiteList: true,
+      enableRcon: true,
+      rconPort: 25577,
+    },
+    mods: [
+      {
+        id: 'AANobbMI',
+        name: 'Sodium',
+        slug: 'sodium',
+        filename: 'sodium-neoforge-0.6.6.jar',
+        installedVersionId: 'v-sod-1',
+        installedVersionNumber: '0.6.6',
+        enabled: true,
+        fileSizeBytes: 2890000,
+        summary: 'A modern, open-source optimization engine for Minecraft that greatly improves performance.',
+        author: 'jellysquid3',
+        loaders: ['neoforge'],
+        gameVersions: ['1.21.1'],
+        installedAt: '2024-12-10T08:00:00Z',
+        iconUrl: 'https://cdn.modrinth.com/data/AANobbMI/icon.png',
+      },
+    ],
+    players: [
+      {
+        uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5',
+        username: 'Notch',
+        isOp: true,
+        isWhitelisted: true,
+        online: true,
+        pingMs: 31,
+        playtimeMinutes: 450,
+        lastSeen: 'Now',
+        ipAddress: '192.168.1.102',
+        coords: { x: 50, y: 72, z: 120, dimension: 'overworld' },
+        health: 20,
+        food: 20,
+        gameMode: 'survival',
+      },
+    ],
+    backups: [],
+    backupSchedule: {
+      enabled: true,
+      frequency: '12h',
+      maxKeepBackups: 10,
+      includeMods: true,
+    },
+    telemetry: {
+      cpuPercent: 28.4,
+      ramUsedMb: 5240,
+      ramMaxMb: 8192,
+      tps: 19.95,
+      tickTimeMs: 22.8,
+      diskUsedMb: 3200,
+      diskTotalMb: 50000,
+      networkInKb: 142.1,
+      networkOutKb: 388.0,
+      uptimeSeconds: 43200,
+    },
+    files: getDefaultServerFiles('NeoForge Tech Horizons', 25567, 'neoforge', []),
+  },
+];
+
+const INITIAL_LOGS: Record<string, ServerLog[]> = {
+  'srv-fabric-smp': [
+    {
+      id: 'log-1',
+      timestamp: '10:00:01',
+      level: 'INFO',
+      thread: 'main',
+      message: 'Loading Minecraft 1.21.4 with Fabric Loader 0.16.7',
+    },
+    {
+      id: 'log-2',
+      timestamp: '10:00:03',
+      level: 'INFO',
+      thread: 'main',
+      message: 'Loading 4 mods: chunky 1.4.28, fabric-api 0.110.1, ferritecore 7.0.0, lithium 0.14.7',
+    },
+    {
+      id: 'log-3',
+      timestamp: '10:00:07',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Starting minecraft server version 1.21.4',
+    },
+    {
+      id: 'log-4',
+      timestamp: '10:00:08',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Loading properties from server.properties',
+    },
+    {
+      id: 'log-5',
+      timestamp: '10:00:09',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Default game type: SURVIVAL',
+    },
+    {
+      id: 'log-6',
+      timestamp: '10:00:11',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Preparing level "world"',
+    },
+    {
+      id: 'log-7',
+      timestamp: '10:00:14',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Preparing start region for dimension minecraft:overworld',
+    },
+    {
+      id: 'log-8',
+      timestamp: '10:00:16',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Time elapsed: 5312 ms',
+    },
+    {
+      id: 'log-9',
+      timestamp: '10:00:16',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Done (14.282s)! For help, type "help"',
+    },
+    {
+      id: 'log-10',
+      timestamp: '10:02:40',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Notch[/192.168.1.102:54201] logged in with entity id 120 at (124.5, 71.0, -350.2)',
+    },
+    {
+      id: 'log-11',
+      timestamp: '10:02:40',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Notch joined the game',
+    },
+    {
+      id: 'log-12',
+      timestamp: '10:04:12',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'jeb_[/192.168.1.115:52310] logged in with entity id 144 at (-45.0, 64.0, 210.5)',
+    },
+    {
+      id: 'log-13',
+      timestamp: '10:04:12',
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'jeb_ joined the game',
+    },
+    {
+      id: 'log-14',
+      timestamp: '10:06:50',
+      level: 'CHAT',
+      thread: 'Async Chat',
+      message: '<Notch> Welcome everyone to the Fabric 1.21.4 server!',
+    },
+    {
+      id: 'log-15',
+      timestamp: '10:07:05',
+      level: 'CHAT',
+      thread: 'Async Chat',
+      message: '<jeb_> Chunky pregen worked great, smooth 20 TPS everywhere.',
+    },
+  ],
+};
+
+const ServerContext = createContext<ServerContextType | undefined>(undefined);
+
+export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [servers, setServers] = useState<MinecraftServer[]>(() => {
+    const saved = localStorage.getItem('crafty_servers');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // fallback
+      }
+    }
+    return INITIAL_SERVERS;
+  });
+
+  const [activeServerId, setActiveServerId] = useState<string>(() => {
+    return servers[0]?.id || 'srv-fabric-smp';
+  });
+
+  const [serverLogs, setServerLogs] = useState<Record<string, ServerLog[]>>(() => {
+    const saved = localStorage.getItem('crafty_logs');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // fallback
+      }
+    }
+    return INITIAL_LOGS;
+  });
+
+  const [alerts, setAlerts] = useState<{
+    id: string;
+    serverId: string;
+    title: string;
+    message: string;
+    date: string;
+    type: 'info' | 'update' | 'warning';
+  }[]>([
+    {
+      id: 'alert-1',
+      serverId: 'srv-fabric-smp',
+      title: 'Fabric Loader Update Available',
+      message: 'Fabric Loader 0.16.10 is available (current: 0.16.7). Includes chunk tick optimizations for 1.21.4.',
+      date: 'Today',
+      type: 'update',
+    },
+  ]);
+
+  const activeServer = servers.find((s) => s.id === activeServerId) || servers[0];
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Save servers to local storage
+  useEffect(() => {
+    localStorage.setItem('crafty_servers', JSON.stringify(servers));
+  }, [servers]);
+
+  // Save logs to local storage
+  useEffect(() => {
+    localStorage.setItem('crafty_logs', JSON.stringify(serverLogs));
+  }, [serverLogs]);
+
+  // Real-time telemetry & background tick simulation for running servers
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      setServers((prevServers) =>
+        prevServers.map((srv) => {
+          if (srv.status !== 'online') return srv;
+
+          // dynamic jitter for realistic telemetry
+          const cpuDelta = (Math.random() - 0.5) * 4;
+          const newCpu = Math.max(3, Math.min(95, srv.telemetry.cpuPercent + cpuDelta));
+
+          const ramDelta = (Math.random() - 0.48) * 30;
+          const newRam = Math.max(
+            srv.minRamMb,
+            Math.min(srv.allocatedRamMb * 0.92, srv.telemetry.ramUsedMb + ramDelta)
+          );
+
+          const tpsJitter = (Math.random() - 0.5) * 0.05;
+          const newTps = Math.min(20.0, Math.max(18.5, 20.0 - (newCpu > 80 ? 0.8 : 0) + tpsJitter));
+
+          const tickMs = Number(((1000 / (newTps * 50)) * (10 + Math.random() * 4)).toFixed(1));
+
+          return {
+            ...srv,
+            telemetry: {
+              ...srv.telemetry,
+              cpuPercent: Number(newCpu.toFixed(1)),
+              ramUsedMb: Math.round(newRam),
+              tps: Number(newTps.toFixed(2)),
+              tickTimeMs: tickMs,
+              uptimeSeconds: srv.telemetry.uptimeSeconds + 3,
+              networkInKb: Math.max(10, Math.round(srv.telemetry.networkInKb + (Math.random() - 0.5) * 20)),
+              networkOutKb: Math.max(20, Math.round(srv.telemetry.networkOutKb + (Math.random() - 0.5) * 40)),
+            },
+          };
+        })
+      );
+    }, 3000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const addLog = (serverId: string, log: Omit<ServerLog, 'id'>) => {
+    const newEntry: ServerLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      ...log,
+    };
+    setServerLogs((prev) => {
+      const existing = prev[serverId] || [];
+      // Keep max 500 logs per server for memory efficiency
+      const updated = [...existing, newEntry].slice(-500);
+      return { ...prev, [serverId]: updated };
+    });
+  };
+
+  const getTimestamp = () => {
+    const now = new Date();
+    return now.toTimeString().split(' ')[0];
+  };
+
+  const startServer = async (id?: string) => {
+    const targetId = id || activeServer.id;
+    const target = servers.find((s) => s.id === targetId);
+    if (!target || target.status === 'online' || target.status === 'starting') return;
+
+    // Transition: starting
+    setServers((prev) =>
+      prev.map((s) =>
+        s.id === targetId
+          ? {
+              ...s,
+              status: 'starting',
+              uptimeStartedAt: new Date().toISOString(),
+              telemetry: { ...s.telemetry, uptimeSeconds: 0, cpuPercent: 35.0, ramUsedMb: s.minRamMb },
+            }
+          : s
+      )
+    );
+
+    addLog(targetId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'main',
+      message: `[CraftyForge] Starting server process (PID: ${Math.floor(10000 + Math.random() * 80000)})...`,
+    });
+    addLog(targetId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'main',
+      message: `Loading Minecraft ${target.minecraftVersion} with ${target.loader.toUpperCase()} (${target.loaderVersion})`,
+    });
+
+    // Simulate startup step 2
+    setTimeout(() => {
+      addLog(targetId, {
+        timestamp: getTimestamp(),
+        level: 'INFO',
+        thread: 'Server thread',
+        message: `Loading properties from server.properties... Port: ${target.port}`,
+      });
+      addLog(targetId, {
+        timestamp: getTimestamp(),
+        level: 'INFO',
+        thread: 'Server thread',
+        message: `Allocated Memory: -Xms${target.minRamMb}M -Xmx${target.allocatedRamMb}M (${target.javaVersion})`,
+      });
+      addLog(targetId, {
+        timestamp: getTimestamp(),
+        level: 'INFO',
+        thread: 'Server thread',
+        message: `Loaded ${target.mods.filter((m) => m.enabled).length} enabled mods/plugins.`,
+      });
+    }, 1200);
+
+    // Simulate startup complete
+    setTimeout(() => {
+      addLog(targetId, {
+        timestamp: getTimestamp(),
+        level: 'INFO',
+        thread: 'Server thread',
+        message: `Done (${(2.4 + Math.random() * 4).toFixed(3)}s)! For help, type "help"`,
+      });
+
+      setServers((prev) =>
+        prev.map((s) =>
+          s.id === targetId
+            ? {
+                ...s,
+                status: 'online',
+                telemetry: {
+                  ...s.telemetry,
+                  tps: 20.0,
+                  cpuPercent: 12.0,
+                  ramUsedMb: Math.round(s.allocatedRamMb * 0.45),
+                },
+              }
+            : s
+        )
+      );
+    }, 2800);
+  };
+
+  const stopServer = async (id?: string) => {
+    const targetId = id || activeServer.id;
+    const target = servers.find((s) => s.id === targetId);
+    if (!target || target.status === 'offline' || target.status === 'stopping') return;
+
+    setServers((prev) =>
+      prev.map((s) => (s.id === targetId ? { ...s, status: 'stopping' } : s))
+    );
+
+    addLog(targetId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Stopping the server...',
+    });
+    addLog(targetId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Saving players...',
+    });
+    addLog(targetId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Server thread',
+      message: 'Saving worlds: saving chunks for level "world"/overworld, nether, the_end',
+    });
+
+    setTimeout(() => {
+      addLog(targetId, {
+        timestamp: getTimestamp(),
+        level: 'INFO',
+        thread: 'Server thread',
+        message: 'ThreadedAnvilChunkStorage (world): All chunks are saved',
+      });
+      addLog(targetId, {
+        timestamp: getTimestamp(),
+        level: 'INFO',
+        thread: 'main',
+        message: '[CraftyForge] Server process terminated safely with exit code 0.',
+      });
+
+      setServers((prev) =>
+        prev.map((s) =>
+          s.id === targetId
+            ? {
+                ...s,
+                status: 'offline',
+                telemetry: {
+                  ...s.telemetry,
+                  cpuPercent: 0,
+                  ramUsedMb: 0,
+                  tps: 20.0,
+                  tickTimeMs: 0,
+                  uptimeSeconds: 0,
+                },
+                players: s.players.map((p) => ({ ...p, online: false })),
+              }
+            : s
+        )
+      );
+    }, 1500);
+  };
+
+  const restartServer = async (id?: string) => {
+    const targetId = id || activeServer.id;
+    await stopServer(targetId);
+    setTimeout(() => {
+      startServer(targetId);
+    }, 2000);
+  };
+
+  const killServer = async (id?: string) => {
+    const targetId = id || activeServer.id;
+    addLog(targetId, {
+      timestamp: getTimestamp(),
+      level: 'WARN',
+      thread: 'System',
+      message: '[CraftyForge] Force killing server process with SIGKILL (-9)...',
+    });
+
+    setServers((prev) =>
+      prev.map((s) =>
+        s.id === targetId
+          ? {
+              ...s,
+              status: 'offline',
+              telemetry: {
+                ...s.telemetry,
+                cpuPercent: 0,
+                ramUsedMb: 0,
+                tps: 20.0,
+                tickTimeMs: 0,
+                uptimeSeconds: 0,
+              },
+              players: s.players.map((p) => ({ ...p, online: false })),
+            }
+          : s
+      )
+    );
+  };
+
+  const executeCommand = (cmd: string, serverId?: string) => {
+    const targetId = serverId || activeServer.id;
+    const cleanCmd = cmd.trim();
+    if (!cleanCmd) return;
+
+    // Log the command entered by operator
+    addLog(targetId, {
+      timestamp: getTimestamp(),
+      level: 'CMD',
+      thread: 'Console',
+      message: `> ${cleanCmd}`,
+    });
+
+    const parts = cleanCmd.replace(/^\//, '').split(' ');
+    const root = parts[0]?.toLowerCase();
+    const arg1 = parts[1];
+    const arg2 = parts.slice(2).join(' ');
+
+    setTimeout(() => {
+      switch (root) {
+        case 'help':
+          addLog(targetId, {
+            timestamp: getTimestamp(),
+            level: 'INFO',
+            thread: 'Server thread',
+            message: 'Available commands: /say, /list, /tps, /whitelist, /op, /deop, /kick, /ban, /save-all, /stop, /reload, /time, /weather, /gamerule',
+          });
+          break;
+
+        case 'say':
+          addLog(targetId, {
+            timestamp: getTimestamp(),
+            level: 'CHAT',
+            thread: 'Server thread',
+            message: `[Server] ${parts.slice(1).join(' ')}`,
+          });
+          break;
+
+        case 'list': {
+          const target = servers.find((s) => s.id === targetId);
+          const onlinePlayers = target?.players.filter((p) => p.online) || [];
+          addLog(targetId, {
+            timestamp: getTimestamp(),
+            level: 'INFO',
+            thread: 'Server thread',
+            message: `There are ${onlinePlayers.length} of a max of ${target?.properties.maxPlayers || 20} players online: ${onlinePlayers.map((p) => p.username).join(', ')}`,
+          });
+          break;
+        }
+
+        case 'tps': {
+          const target = servers.find((s) => s.id === targetId);
+          const tps = target?.telemetry.tps || 20.0;
+          const mspt = target?.telemetry.tickTimeMs || 12.0;
+          addLog(targetId, {
+            timestamp: getTimestamp(),
+            level: 'INFO',
+            thread: 'Server thread',
+            message: `TPS from last 1m, 5m, 15m: ${tps.toFixed(2)}, 20.0, 20.0 (Tick time: ${mspt}ms)`,
+          });
+          break;
+        }
+
+        case 'save-all':
+          addLog(targetId, {
+            timestamp: getTimestamp(),
+            level: 'INFO',
+            thread: 'Server thread',
+            message: 'Saving the game (this may take a moment!)',
+          });
+          setTimeout(() => {
+            addLog(targetId, {
+              timestamp: getTimestamp(),
+              level: 'INFO',
+              thread: 'Server thread',
+              message: 'Saved the game successfully.',
+            });
+          }, 600);
+          break;
+
+        case 'stop':
+          stopServer(targetId);
+          break;
+
+        case 'kick':
+          if (arg1) {
+            kickPlayer(targetId, arg1, arg2 || 'Kicked by an operator.');
+          } else {
+            addLog(targetId, {
+              timestamp: getTimestamp(),
+              level: 'WARN',
+              thread: 'Server thread',
+              message: 'Usage: /kick <player> [reason]',
+            });
+          }
+          break;
+
+        case 'ban':
+          if (arg1) {
+            banPlayer(targetId, arg1, arg2 || 'Banned by operator.');
+          } else {
+            addLog(targetId, {
+              timestamp: getTimestamp(),
+              level: 'WARN',
+              thread: 'Server thread',
+              message: 'Usage: /ban <player> [reason]',
+            });
+          }
+          break;
+
+        case 'op':
+          if (arg1) {
+            togglePlayerOp(targetId, arg1);
+          }
+          break;
+
+        case 'time':
+          addLog(targetId, {
+            timestamp: getTimestamp(),
+            level: 'INFO',
+            thread: 'Server thread',
+            message: `Set the time to ${parts[2] || 'day'} (1000)`,
+          });
+          break;
+
+        case 'weather':
+          addLog(targetId, {
+            timestamp: getTimestamp(),
+            level: 'INFO',
+            thread: 'Server thread',
+            message: `Set the weather to ${parts[1] || 'clear'}`,
+          });
+          break;
+
+        default:
+          addLog(targetId, {
+            timestamp: getTimestamp(),
+            level: 'INFO',
+            thread: 'Server thread',
+            message: `Executed command '/${cleanCmd}' successfully.`,
+          });
+          break;
+      }
+    }, 200);
+  };
+
+  const clearLogs = (serverId?: string) => {
+    const targetId = serverId || activeServer.id;
+    setServerLogs((prev) => ({ ...prev, [targetId]: [] }));
+  };
+
+  // Mod actions
+  const installMod = (serverId: string, mod: InstalledMod) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        const exists = s.mods.some((m) => m.id === mod.id || m.slug === mod.slug);
+        if (exists) {
+          return {
+            ...s,
+            mods: s.mods.map((m) => (m.id === mod.id || m.slug === mod.slug ? mod : m)),
+          };
+        }
+        return {
+          ...s,
+          mods: [mod, ...s.mods],
+        };
+      })
+    );
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'ModManager',
+      message: `[Modrinth] Installed mod '${mod.name}' (${mod.filename}) into /mods folder.`,
+    });
+  };
+
+  const toggleMod = (serverId: string, modId: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          mods: s.mods.map((m) => {
+            if (m.id === modId) {
+              const newEnabled = !m.enabled;
+              const newFilename = newEnabled
+                ? m.filename.replace(/\.disabled$/, '')
+                : m.filename.endsWith('.disabled')
+                ? m.filename
+                : `${m.filename}.disabled`;
+              return { ...m, enabled: newEnabled, filename: newFilename };
+            }
+            return m;
+          }),
+        };
+      })
+    );
+  };
+
+  const updateMod = (
+    serverId: string,
+    modId: string,
+    newVersionNumber: string,
+    newVersionId: string
+  ) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          mods: s.mods.map((m) => {
+            if (m.id === modId) {
+              return {
+                ...m,
+                installedVersionId: newVersionId,
+                installedVersionNumber: newVersionNumber,
+                hasUpdate: false,
+                filename: `${m.slug}-${newVersionNumber}.jar`,
+              };
+            }
+            return m;
+          }),
+        };
+      })
+    );
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'ModManager',
+      message: `[Modrinth] Mod updated to version ${newVersionNumber}. Jar replaced.`,
+    });
+  };
+
+  const removeMod = (serverId: string, modId: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        const removed = s.mods.find((m) => m.id === modId);
+        if (removed) {
+          addLog(serverId, {
+            timestamp: getTimestamp(),
+            level: 'INFO',
+            thread: 'ModManager',
+            message: `Deleted file ${removed.filename} from /mods directory.`,
+          });
+        }
+        return {
+          ...s,
+          mods: s.mods.filter((m) => m.id !== modId),
+        };
+      })
+    );
+  };
+
+  const checkModUpdatesForServer = async (serverId: string): Promise<number> => {
+    const srv = servers.find((s) => s.id === serverId);
+    if (!srv) return 0;
+
+    let updatesFound = 0;
+    const updatedMods = await Promise.all(
+      srv.mods.map(async (mod) => {
+        try {
+          const res = await checkModUpdate(
+            mod.id,
+            mod.installedVersionNumber,
+            srv.loader,
+            srv.minecraftVersion
+          );
+          if (res.hasUpdate && res.latestVersion) {
+            updatesFound++;
+            return {
+              ...mod,
+              hasUpdate: true,
+              latestVersionId: res.latestVersion.id,
+              latestVersionNumber: res.latestVersion.version_number,
+            };
+          }
+          return { ...mod, hasUpdate: false };
+        } catch {
+          return mod;
+        }
+      })
+    );
+
+    setServers((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, mods: updatedMods } : s))
+    );
+
+    if (updatesFound > 0) {
+      setAlerts((prev) => [
+        {
+          id: `alert-mods-${Date.now()}`,
+          serverId,
+          title: `${updatesFound} Mod Update(s) Available`,
+          message: `New compatible updates found for ${srv.name} on Modrinth. Review in Mod Manager.`,
+          date: 'Just now',
+          type: 'update',
+        },
+        ...prev,
+      ]);
+    }
+
+    return updatesFound;
+  };
+
+  const upgradeLoader = async (serverId: string) => {
+    const srv = servers.find((s) => s.id === serverId);
+    if (!srv) return;
+
+    const latest = getLatestLoaderVersion(srv.loader, srv.minecraftVersion);
+    const oldVersion = srv.loaderVersion;
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Updater',
+      message: `[Upgrade] Updating loader ${srv.loader.toUpperCase()} from ${oldVersion} to ${latest.latestVersion}...`,
+    });
+
+    setServers((prev) =>
+      prev.map((s) =>
+        s.id === serverId
+          ? {
+              ...s,
+              loaderVersion: latest.latestVersion,
+              hasLoaderUpdate: false,
+            }
+          : s
+      )
+    );
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Updater',
+      message: `[Upgrade] Successfully upgraded loader to ${latest.latestVersion}! Server restart advised.`,
+    });
+  };
+
+  // Backups
+  const createBackup = async (
+    serverId: string,
+    customName?: string,
+    type: 'manual' | 'scheduled' = 'manual'
+  ): Promise<BackupRecord> => {
+    const srv = servers.find((s) => s.id === serverId);
+    const dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    const name = customName || `backup-${srv?.name.toLowerCase().replace(/\s+/g, '-')}-${dateStr}`;
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'BackupSystem',
+      message: `Creating world and config snapshot archive '${name}.zip'...`,
+    });
+
+    const newBackup: BackupRecord = {
+      id: `bk-${Date.now()}`,
+      name,
+      createdAt: new Date().toISOString(),
+      sizeBytes: Math.floor(120000000 + Math.random() * 80000000), // ~120-200MB
+      isPinned: false,
+      type,
+      minecraftVersion: srv?.minecraftVersion || '1.21.4',
+      loader: srv?.loader || 'fabric',
+    };
+
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        // Enforce max keep backups if schedule enabled
+        let currentBackups = [newBackup, ...s.backups];
+        if (type === 'scheduled' && s.backupSchedule.enabled) {
+          const unpinned = currentBackups.filter((b) => !b.isPinned);
+          if (unpinned.length > s.backupSchedule.maxKeepBackups) {
+            const pinned = currentBackups.filter((b) => b.isPinned);
+            currentBackups = [...pinned, ...unpinned.slice(0, s.backupSchedule.maxKeepBackups)];
+          }
+        }
+        return {
+          ...s,
+          backups: currentBackups,
+          backupSchedule: {
+            ...s.backupSchedule,
+            lastRunAt: new Date().toISOString(),
+          },
+        };
+      })
+    );
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'BackupSystem',
+      message: `Backup '${name}' completed successfully (${(newBackup.sizeBytes / (1024 * 1024)).toFixed(1)} MB).`,
+    });
+
+    return newBackup;
+  };
+
+  const restoreBackup = async (serverId: string, backupId: string) => {
+    const srv = servers.find((s) => s.id === serverId);
+    const bk = srv?.backups.find((b) => b.id === backupId);
+    if (!bk) return;
+
+    if (srv?.status === 'online') {
+      await stopServer(serverId);
+    }
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'WARN',
+      thread: 'BackupSystem',
+      message: `Restoring server state from snapshot '${bk.name}'...`,
+    });
+
+    setTimeout(() => {
+      addLog(serverId, {
+        timestamp: getTimestamp(),
+        level: 'INFO',
+        thread: 'BackupSystem',
+        message: 'Snapshot extracted and verified. Ready to start.',
+      });
+    }, 1500);
+  };
+
+  const deleteBackup = (serverId: string, backupId: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          backups: s.backups.filter((b) => b.id !== backupId),
+        };
+      })
+    );
+  };
+
+  const togglePinBackup = (serverId: string, backupId: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          backups: s.backups.map((b) =>
+            b.id === backupId ? { ...b, isPinned: !b.isPinned } : b
+          ),
+        };
+      })
+    );
+  };
+
+  const updateBackupSchedule = (serverId: string, schedule: BackupSchedule) => {
+    setServers((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, backupSchedule: schedule } : s))
+    );
+  };
+
+  // Players
+  const kickPlayer = (serverId: string, username: string, reason?: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          players: s.players.map((p) =>
+            p.username.toLowerCase() === username.toLowerCase()
+              ? { ...p, online: false }
+              : p
+          ),
+        };
+      })
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Server thread',
+      message: `Kicked ${username} from the server (${reason || 'Kicked by an operator'})`,
+    });
+  };
+
+  const banPlayer = (serverId: string, username: string, reason?: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          players: s.players.map((p) =>
+            p.username.toLowerCase() === username.toLowerCase()
+              ? { ...p, online: false, isBanned: true }
+              : p
+          ),
+        };
+      })
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Server thread',
+      message: `Banned player ${username}: ${reason || 'Banned by operator'}`,
+    });
+  };
+
+  const unbanPlayer = (serverId: string, username: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          players: s.players.map((p) =>
+            p.username.toLowerCase() === username.toLowerCase()
+              ? { ...p, isBanned: false }
+              : p
+          ),
+        };
+      })
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Server thread',
+      message: `Unbanned player ${username}.`,
+    });
+  };
+
+  const togglePlayerOp = (serverId: string, username: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        const targetPlayer = s.players.find(
+          (p) => p.username.toLowerCase() === username.toLowerCase()
+        );
+        const newOp = !targetPlayer?.isOp;
+        addLog(serverId, {
+          timestamp: getTimestamp(),
+          level: 'INFO',
+          thread: 'Server thread',
+          message: newOp ? `Made ${username} a server operator` : `Removed ${username}'s operator status`,
+        });
+        return {
+          ...s,
+          players: s.players.map((p) =>
+            p.username.toLowerCase() === username.toLowerCase()
+              ? { ...p, isOp: newOp }
+              : p
+          ),
+        };
+      })
+    );
+  };
+
+  const togglePlayerWhitelist = (serverId: string, username: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          players: s.players.map((p) =>
+            p.username.toLowerCase() === username.toLowerCase()
+              ? { ...p, isWhitelisted: !p.isWhitelisted }
+              : p
+          ),
+        };
+      })
+    );
+  };
+
+  const updateProperties = (serverId: string, props: Partial<ServerProperties>) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          properties: { ...s.properties, ...props },
+          name: props.serverName || s.name,
+        };
+      })
+    );
+  };
+
+  const createServer = (newServerData: {
+    name: string;
+    description: string;
+    loader: ServerLoader;
+    loaderVersion: string;
+    minecraftVersion: string;
+    minRamMb?: number;
+    ramMb: number;
+    port: number;
+    modpackId?: string;
+  }): MinecraftServer => {
+    const id = `srv-${newServerData.loader}-${Date.now().toString(36)}`;
+    const newServer: MinecraftServer = {
+      id,
+      name: newServerData.name,
+      description: newServerData.description || `${newServerData.loader.toUpperCase()} ${newServerData.minecraftVersion} server instance`,
+      status: 'offline',
+      loader: newServerData.loader,
+      loaderVersion: newServerData.loaderVersion,
+      minecraftVersion: newServerData.minecraftVersion,
+      allocatedRamMb: newServerData.ramMb,
+      minRamMb: newServerData.minRamMb ? newServerData.minRamMb : Math.max(1024, Math.floor(newServerData.ramMb / 2)),
+      javaVersion: 'Java 21 (Temurin-21.0.4)',
+      port: newServerData.port,
+      createdAt: new Date().toISOString(),
+      properties: {
+        serverName: newServerData.name,
+        motd: `§a${newServerData.name} §7| §fPowered by CraftyForge`,
+        serverPort: newServerData.port,
+        maxPlayers: 20,
+        difficulty: 'normal',
+        gamemode: 'survival',
+        pvp: true,
+        allowFlight: false,
+        viewDistance: 10,
+        simulationDistance: 8,
+        onlineMode: true,
+        spawnProtection: 16,
+        hardcore: false,
+        whiteList: false,
+        enableRcon: false,
+        rconPort: newServerData.port + 10,
+      },
+      mods: [],
+      players: [
+        {
+          uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5',
+          username: 'Notch',
+          isOp: true,
+          isWhitelisted: true,
+          online: false,
+          pingMs: 0,
+          playtimeMinutes: 0,
+          lastSeen: 'Never',
+          ipAddress: '127.0.0.1',
+          coords: { x: 0, y: 64, z: 0, dimension: 'overworld' },
+          health: 20,
+          food: 20,
+          gameMode: 'survival',
+        },
+      ],
+      backups: [],
+      backupSchedule: {
+        enabled: true,
+        frequency: '12h',
+        maxKeepBackups: 5,
+        includeMods: true,
+      },
+      telemetry: {
+        cpuPercent: 0,
+        ramUsedMb: 0,
+        ramMaxMb: newServerData.ramMb,
+        tps: 20.0,
+        tickTimeMs: 0,
+        diskUsedMb: 420,
+        diskTotalMb: 50000,
+        networkInKb: 0,
+        networkOutKb: 0,
+        uptimeSeconds: 0,
+      },
+      files: getDefaultServerFiles(newServerData.name, newServerData.port, newServerData.loader, []),
+    };
+
+    setServers((prev) => [...prev, newServer]);
+    setActiveServerId(newServer.id);
+
+    setServerLogs((prev) => ({
+      ...prev,
+      [newServer.id]: [
+        {
+          id: `log-init-1`,
+          timestamp: getTimestamp(),
+          level: 'INFO',
+          thread: 'Setup',
+          message: `Created server "${newServer.name}" (${newServer.loader.toUpperCase()} ${newServer.minecraftVersion}) on port ${newServer.port}.`,
+        },
+      ],
+    }));
+
+    return newServer;
+  };
+
+  const deleteServer = (serverId: string) => {
+    if (servers.length <= 1) return; // Keep at least 1 server
+    setServers((prev) => prev.filter((s) => s.id !== serverId));
+    if (activeServerId === serverId) {
+      const remaining = servers.filter((s) => s.id !== serverId);
+      if (remaining[0]) setActiveServerId(remaining[0].id);
+    }
+  };
+
+  const dismissAlert = (id: string) => {
+    setAlerts((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  // File Management Methods
+  const saveFile = (serverId: string, path: string, content: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        const exists = s.files.some((f) => f.path === path);
+        const sizeBytes = new Blob([content]).size;
+        const lastModified = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+        let newFiles: ServerFile[];
+        if (exists) {
+          newFiles = s.files.map((f) =>
+            f.path === path ? { ...f, content, sizeBytes, lastModified } : f
+          );
+        } else {
+          const parts = path.split('/');
+          const name = parts[parts.length - 1];
+          const ext = name.includes('.') ? name.split('.').pop() : '';
+          const newFile: ServerFile = {
+            id: `f-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            name,
+            path,
+            isDirectory: false,
+            sizeBytes,
+            lastModified,
+            content,
+            extension: ext,
+          };
+          newFiles = [...s.files, newFile];
+        }
+
+        return { ...s, files: newFiles };
+      })
+    );
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'FileManager',
+      message: `Saved file "${path}".`,
+    });
+  };
+
+  const createFile = (serverId: string, path: string, isDirectory: boolean, content: string = '') => {
+    const parts = path.split('/').filter(Boolean);
+    const name = parts[parts.length - 1] || 'new-file';
+    const ext = !isDirectory && name.includes('.') ? name.split('.').pop() : undefined;
+    const lastModified = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    const newFile: ServerFile = {
+      id: `f-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name,
+      path: path.startsWith('/') ? path : `/${path}`,
+      isDirectory,
+      sizeBytes: isDirectory ? 0 : new Blob([content]).size,
+      lastModified,
+      content: isDirectory ? undefined : content,
+      extension: ext,
+    };
+
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        // Avoid duplicate paths
+        if (s.files.some((f) => f.path === newFile.path)) return s;
+        return { ...s, files: [...s.files, newFile] };
+      })
+    );
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'FileManager',
+      message: `Created ${isDirectory ? 'directory' : 'file'} "${newFile.path}".`,
+    });
+  };
+
+  const deleteFile = (serverId: string, path: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        // Also remove children if directory
+        return {
+          ...s,
+          files: s.files.filter((f) => f.path !== path && !f.path.startsWith(`${path}/`)),
+        };
+      })
+    );
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'FileManager',
+      message: `Deleted "${path}".`,
+    });
+  };
+
+  const renameFile = (serverId: string, oldPath: string, newName: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        const target = s.files.find((f) => f.path === oldPath);
+        if (!target) return s;
+
+        const dir = oldPath.substring(0, oldPath.lastIndexOf('/'));
+        const newPath = `${dir}/${newName}`.replace(/^\/\//, '/');
+        const ext = !target.isDirectory && newName.includes('.') ? newName.split('.').pop() : target.extension;
+
+        return {
+          ...s,
+          files: s.files.map((f) => {
+            if (f.path === oldPath) {
+              return { ...f, name: newName, path: newPath, extension: ext };
+            }
+            if (f.path.startsWith(`${oldPath}/`)) {
+              return { ...f, path: f.path.replace(oldPath, newPath) };
+            }
+            return f;
+          }),
+        };
+      })
+    );
+  };
+
+  const [wrapperSettings, setWrapperSettings] = useState<import('../types/server').WrapperSettings>(() => {
+    const saved = localStorage.getItem('crafty_wrapper_settings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.portRangeStart) return parsed;
+      } catch {}
+    }
+    return {
+      autoAcceptEula: true,
+      defaultMinRamGb: 2,
+      defaultMaxRamGb: 4,
+      defaultJavaPath: '/usr/lib/jvm/temurin-21-jdk',
+      portRangeStart: 25560,
+      portRangeEnd: 25569,
+      telemetryIntervalMs: 2500,
+      enableAnonymousTelemetry: false,
+      javaRuntimes: [
+        {
+          id: 'java-21',
+          name: 'Java 21 (LTS)',
+          version: 21,
+          vendor: 'Eclipse Temurin (Adoptium)',
+          path: '/usr/lib/jvm/temurin-21-jdk',
+          installed: true,
+          sizeMb: 320,
+          isDefault: true,
+        },
+        {
+          id: 'java-17',
+          name: 'Java 17 (LTS)',
+          version: 17,
+          vendor: 'Eclipse Temurin (Adoptium)',
+          path: '/usr/lib/jvm/temurin-17-jdk',
+          installed: true,
+          sizeMb: 295,
+        },
+        {
+          id: 'java-16',
+          name: 'Java 16',
+          version: 16,
+          vendor: 'AdoptOpenJDK',
+          path: '/usr/lib/jvm/adopt-16-jdk',
+          installed: false,
+          sizeMb: 280,
+        },
+        {
+          id: 'java-8',
+          name: 'Java 8 (Legacy)',
+          version: 8,
+          vendor: 'Azul Zulu OpenJDK',
+          path: '/usr/lib/jvm/zulu-8-jdk',
+          installed: false,
+          sizeMb: 190,
+        },
+      ],
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('crafty_wrapper_settings', JSON.stringify(wrapperSettings));
+  }, [wrapperSettings]);
+
+  const updateWrapperSettings = (partial: Partial<import('../types/server').WrapperSettings>) => {
+    setWrapperSettings((prev) => ({ ...prev, ...partial }));
+  };
+
+  const archiveServer = (serverId: string) => {
+    const srv = servers.find((s) => s.id === serverId);
+    if (srv && srv.status === 'online') {
+      stopServer(serverId);
+    }
+    setServers((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, isArchived: true, status: 'offline' } : s))
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'System',
+      message: `[Archive] Server "${srv?.name}" archived and preserved in vault.`,
+    });
+  };
+
+  const unarchiveServer = (serverId: string) => {
+    setServers((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, isArchived: false } : s))
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'System',
+      message: `[Archive] Server restored from vault to active fleet.`,
+    });
+  };
+
+  const setServerRam = (serverId: string, minRamMb: number, maxRamMb: number) => {
+    setServers((prev) =>
+      prev.map((s) =>
+        s.id === serverId
+          ? {
+              ...s,
+              minRamMb: Math.max(512, Math.min(minRamMb, maxRamMb)),
+              allocatedRamMb: Math.max(1024, maxRamMb),
+            }
+          : s
+      )
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'System',
+      message: `Updated memory allocation: Min ${minRamMb} MB (-Xms) · Max ${maxRamMb} MB (-Xmx).`,
+    });
+  };
+
+  const uploadModFile = (serverId: string, fileName: string, fileBytes: number) => {
+    const slug = fileName.replace(/\.jar(\.disabled)?$/, '').toLowerCase();
+    const cleanName = fileName.replace(/[-_]/g, ' ').replace(/\.jar(\.disabled)?$/, '');
+    const newMod: InstalledMod = {
+      id: `custom-${Date.now()}`,
+      name: cleanName,
+      slug,
+      filename: fileName,
+      installedVersionId: 'v-custom',
+      installedVersionNumber: '1.0.0',
+      enabled: !fileName.endsWith('.disabled'),
+      fileSizeBytes: fileBytes,
+      summary: 'Custom uploaded mod / plugin jar file.',
+      author: 'Uploaded File',
+      loaders: ['custom'],
+      gameVersions: ['any'],
+      installedAt: new Date().toISOString(),
+    };
+
+    setServers((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, mods: [newMod, ...s.mods] } : s))
+    );
+
+    createFile(serverId, `/mods/${fileName}`, false, '');
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'ModManager',
+      message: `Uploaded custom file "${fileName}" (${(fileBytes / 1024).toFixed(1)} KB) into /mods folder.`,
+    });
+  };
+
+  const changeLoader = (
+    serverId: string,
+    newLoader: ServerLoader,
+    newLoaderVersion: string,
+    newMcVersion?: string
+  ) => {
+    const srv = servers.find((s) => s.id === serverId);
+    if (!srv) return;
+
+    setServers((prev) =>
+      prev.map((s) =>
+        s.id === serverId
+          ? {
+              ...s,
+              loader: newLoader,
+              loaderVersion: newLoaderVersion,
+              minecraftVersion: newMcVersion || s.minecraftVersion,
+              hasLoaderUpdate: false,
+            }
+          : s
+      )
+    );
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Updater',
+      message: `[Core] Changed server loader to ${newLoader.toUpperCase()} (${newLoaderVersion}) on MC ${newMcVersion || srv.minecraftVersion}.`,
+    });
+  };
+
+  const updateServerIcon = (serverId: string, iconUrl: string) => {
+    setServers((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, serverIconUrl: iconUrl } : s))
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'ServerProperties',
+      message: 'Updated server-icon.png.',
+    });
+  };
+
+  const toggleSleepMode = (serverId: string, enabled: boolean, inactivityMinutes = 15) => {
+    setServers((prev) =>
+      prev.map((s) =>
+        s.id === serverId
+          ? { ...s, sleepModeEnabled: enabled, sleepInactivityMinutes: inactivityMinutes }
+          : s
+      )
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'HibernationProxy',
+      message: `Sleep mode ${enabled ? 'enabled' : 'disabled'} (Inactivity timeout: ${inactivityMinutes}m).`,
+    });
+  };
+
+  const putServerToSleep = (serverId: string) => {
+    setServers((prev) =>
+      prev.map((s) =>
+        s.id === serverId
+          ? {
+              ...s,
+              status: 'sleeping',
+              isSleeping: true,
+              telemetry: { ...s.telemetry, cpuPercent: 0, ramUsedMb: 0, uptimeSeconds: 0 },
+              players: s.players.map((p) => ({ ...p, online: false })),
+            }
+          : s
+      )
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'HibernationProxy',
+      message: '[Sleep Mode] Zero players active. Server JVM suspended into hibernation. Port listening for next ping/handshake.',
+    });
+  };
+
+  const wakeServer = async (serverId: string) => {
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'HibernationProxy',
+      message: '[Sleep Mode] Incoming client ping / handshake intercepted! Waking server instance...',
+    });
+    setServers((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, isSleeping: false } : s))
+    );
+    await startServer(serverId);
+  };
+
+  const approveWhitelistRequest = (serverId: string, requestId: string) => {
+    const srv = servers.find((s) => s.id === serverId);
+    const req = srv?.whitelistRequests?.find((r) => r.id === requestId);
+    if (!req) return;
+
+    // Add to whitelist
+    togglePlayerWhitelist(serverId, req.username);
+
+    // Remove from pending
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          whitelistRequests: (s.whitelistRequests || []).filter((r) => r.id !== requestId),
+        };
+      })
+    );
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Server thread',
+      message: `[Whitelist] Approved join request from ${req.username} (${req.ip}). Added to whitelist.json`,
+    });
+  };
+
+  const denyWhitelistRequest = (serverId: string, requestId: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          whitelistRequests: (s.whitelistRequests || []).filter((r) => r.id !== requestId),
+        };
+      })
+    );
+  };
+
+  const addScheduledTask = (
+    serverId: string,
+    task: Omit<import('../types/server').ScheduledTask, 'id'>
+  ) => {
+    const newTask = {
+      ...task,
+      id: `task-${Date.now()}`,
+    };
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          scheduledTasks: [...(s.scheduledTasks || []), newTask],
+        };
+      })
+    );
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Scheduler',
+      message: `Created scheduled task "${newTask.name}" (${newTask.cronOrInterval}).`,
+    });
+  };
+
+  const toggleScheduledTask = (serverId: string, taskId: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          scheduledTasks: (s.scheduledTasks || []).map((t) =>
+            t.id === taskId ? { ...t, enabled: !t.enabled } : t
+          ),
+        };
+      })
+    );
+  };
+
+  const deleteScheduledTask = (serverId: string, taskId: string) => {
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          scheduledTasks: (s.scheduledTasks || []).filter((t) => t.id !== taskId),
+        };
+      })
+    );
+  };
+
+  const runScheduledTaskNow = (serverId: string, taskId: string) => {
+    const srv = servers.find((s) => s.id === serverId);
+    const task = srv?.scheduledTasks?.find((t) => t.id === taskId);
+    if (!task) return;
+
+    addLog(serverId, {
+      timestamp: getTimestamp(),
+      level: 'INFO',
+      thread: 'Scheduler',
+      message: `Executing task "${task.name}" on demand...`,
+    });
+
+    if (task.type === 'backup') {
+      createBackup(serverId, `sched-${task.name.toLowerCase().replace(/\s+/g, '-')}`, 'scheduled');
+    } else if (task.type === 'restart') {
+      restartServer(serverId);
+    } else if (task.type === 'command' && task.command) {
+      executeCommand(task.command, serverId);
+    } else if (task.type === 'sleep') {
+      putServerToSleep(serverId);
+    }
+
+    setServers((prev) =>
+      prev.map((s) => {
+        if (s.id !== serverId) return s;
+        return {
+          ...s,
+          scheduledTasks: (s.scheduledTasks || []).map((t) =>
+            t.id === taskId ? { ...t, lastRun: 'Just now' } : t
+          ),
+        };
+      })
+    );
+  };
+
+  const downloadJavaRuntime = async (runtimeId: string) => {
+    setWrapperSettings((prev) => ({
+      ...prev,
+      javaRuntimes: (prev.javaRuntimes || []).map((r) =>
+        r.id === runtimeId ? { ...r, installed: true } : r
+      ),
+    }));
+  };
+
+  return (
+    <ServerContext.Provider
+      value={{
+        servers,
+        activeServer,
+        setActiveServerId,
+        serverLogs,
+        startServer,
+        stopServer,
+        restartServer,
+        killServer,
+        executeCommand,
+        clearLogs,
+        installMod,
+        toggleMod,
+        updateMod,
+        removeMod,
+        checkModUpdatesForServer,
+        upgradeLoader,
+        createBackup,
+        restoreBackup,
+        deleteBackup,
+        togglePinBackup,
+        updateBackupSchedule,
+        kickPlayer,
+        banPlayer,
+        unbanPlayer,
+        togglePlayerOp,
+        togglePlayerWhitelist,
+        saveFile,
+        createFile,
+        deleteFile,
+        renameFile,
+        archiveServer,
+        unarchiveServer,
+        setServerRam,
+        uploadModFile,
+        changeLoader,
+        updateServerIcon,
+        toggleSleepMode,
+        wakeServer,
+        putServerToSleep,
+        approveWhitelistRequest,
+        denyWhitelistRequest,
+        addScheduledTask,
+        toggleScheduledTask,
+        deleteScheduledTask,
+        runScheduledTaskNow,
+        downloadJavaRuntime,
+        wrapperSettings,
+        updateWrapperSettings,
+        updateProperties,
+        createServer,
+        deleteServer,
+        alerts,
+        dismissAlert,
+      }}
+    >
+      {children}
+    </ServerContext.Provider>
+  );
+};
+
+export const useServer = () => {
+  const context = useContext(ServerContext);
+  if (!context) {
+    throw new Error('useServer must be used within a ServerProvider');
+  }
+  return context;
+};

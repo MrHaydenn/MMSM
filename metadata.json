@@ -1,0 +1,6 @@
+{
+  "name": "MMSM - MrHaydenn's Minecraft Server Manager",
+  "description": "MMSM (MrHaydenn's Minecraft Server Manager) - Advanced Minecraft server wrapper featuring native Modrinth modpack/plugin integration, real-time interactive console, multi-server fleet management, auto-backups, and player analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

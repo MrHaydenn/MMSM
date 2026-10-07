@@ -90,6 +90,19 @@ export const ConfigEditor: React.FC = () => {
   const [isInstallingJava25, setIsInstallingJava25] = useState(false);
   const [javaNotice, setJavaNotice] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (activeServer.javaVersion) {
+      if (activeServer.javaVersion.startsWith('/') || activeServer.javaVersion.startsWith('C:\\') || activeServer.javaVersion.includes('\\') || activeServer.javaVersion.includes('/')) {
+        setSelectedJavaVer('custom');
+        setCustomJavaPathInput(activeServer.javaVersion);
+      } else {
+        setSelectedJavaVer(activeServer.javaVersion);
+      }
+    } else {
+      setSelectedJavaVer('auto');
+    }
+  }, [activeServer.id, activeServer.javaVersion]);
+
   const handleSaveVisual = (e: React.FormEvent) => {
     e.preventDefault();
     const finalJavaVer = selectedJavaVer === 'custom' ? customJavaPathInput : selectedJavaVer;

@@ -107,15 +107,16 @@ function findBestJavaExecutable(preferredPath?: string, requestedVersion?: strin
   const internalJava17 = path.join(RUNTIMES_DIR, 'java-17', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
   const internalJava8  = path.join(RUNTIMES_DIR, 'java-8',  'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
 
-  const reqStr = (requestedVersion || preferredPath || '').toLowerCase();
+  const reqStr = `${preferredPath || ''} ${requestedVersion || ''}`.toLowerCase();
 
-  if (reqStr.includes('25') || reqStr.includes('69')) {
-    if (fs.existsSync(internalJava25)) return { cmd: internalJava25, name: 'Managed Eclipse Temurin Java 25 (MMSM)' };
-  } else if (reqStr.includes('21') || reqStr.includes('65')) {
+  // If explicit version requested
+  if (reqStr.includes('21') && !reqStr.includes('25')) {
     if (fs.existsSync(internalJava21)) return { cmd: internalJava21, name: 'Managed Eclipse Temurin Java 21 LTS (MMSM)' };
-  } else if (reqStr.includes('17') || reqStr.includes('61')) {
+  } else if (reqStr.includes('25')) {
+    if (fs.existsSync(internalJava25)) return { cmd: internalJava25, name: 'Managed Eclipse Temurin Java 25 (MMSM)' };
+  } else if (reqStr.includes('17')) {
     if (fs.existsSync(internalJava17)) return { cmd: internalJava17, name: 'Managed Eclipse Temurin Java 17 LTS (MMSM)' };
-  } else if (reqStr.includes('8') || reqStr.includes('52')) {
+  } else if (reqStr.includes('8')) {
     if (fs.existsSync(internalJava8)) return { cmd: internalJava8, name: 'Managed Eclipse Temurin Java 8 (MMSM)' };
   }
 
@@ -142,7 +143,7 @@ function findBestJavaExecutable(preferredPath?: string, requestedVersion?: strin
       path.join(localAppData, 'Programs', 'Eclipse Adoptium'),
     ];
 
-    const targetVer = reqStr.includes('25') ? '25' : reqStr.includes('21') ? '21' : reqStr.includes('17') ? '17' : reqStr.includes('8') ? '8' : '25';
+    const targetVer = reqStr.includes('21') ? '21' : reqStr.includes('25') ? '25' : reqStr.includes('17') ? '17' : reqStr.includes('8') ? '8' : '25';
     for (const base of searchBases) {
       if (fs.existsSync(base)) {
         try {
@@ -647,22 +648,29 @@ app.post('/api/servers/:id/start', async (req, res) => {
     }
   }
 
-  // Detect if requested version requires Java 25
-  const needsJava25 = loader === 'fabric' || minecraftVersion.startsWith('1.21') || (javaPath && javaPath.includes('25'));
-  const internalJava25Exe = path.join(RUNTIMES_DIR, 'java-25', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
-
-  if (needsJava25 && !fs.existsSync(internalJava25Exe)) {
-    addServerLog(id, 'INFO', 'Launcher', 'Fabric / MC 1.21+ requires Java 25. Auto-downloading Eclipse Temurin JDK 25 into ./runtimes/java-25...');
-    try {
-      await handleInstallJava('25');
-    } catch (jErr: any) {
-      addServerLog(id, 'WARN', 'Launcher', `Auto-install Java 25 notice: ${jErr.message}`);
+  // Determine Java executable selection
+  let requestedJavaVer: string | undefined = undefined;
+  if (javaPath && javaPath !== 'auto') {
+    addServerLog(id, 'INFO', 'Launcher', `User configured Java Selection: "${javaPath}"`);
+    requestedJavaVer = javaPath;
+  } else {
+    // Auto mode for Fabric / MC 1.21+
+    if (loader === 'fabric' || minecraftVersion.startsWith('1.21')) {
+      requestedJavaVer = '25';
+      const internalJava25Exe = path.join(RUNTIMES_DIR, 'java-25', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+      if (!fs.existsSync(internalJava25Exe)) {
+        addServerLog(id, 'INFO', 'Launcher', 'Fabric / MC 1.21+ requires Java 25. Auto-downloading Eclipse Temurin JDK 25 into ./runtimes/java-25...');
+        try {
+          await handleInstallJava('25');
+        } catch (jErr: any) {
+          addServerLog(id, 'WARN', 'Launcher', `Auto-install Java 25 notice: ${jErr.message}`);
+        }
+      }
     }
   }
 
-  const requestedJavaVer = needsJava25 ? '25' : undefined;
   const bestJava = findBestJavaExecutable(javaPath, requestedJavaVer);
-  addServerLog(id, 'INFO', 'Launcher', `Target Java Runtime: ${bestJava.name}`);
+  addServerLog(id, 'INFO', 'Launcher', `Resolved Java Executable: ${bestJava.name} -> "${bestJava.cmd}"`);
 
   const xms = `${minRamMb || 1024}M`;
   const xmx = `${ramMb || 2048}M`;

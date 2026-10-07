@@ -1064,6 +1064,7 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           ramMb: target.allocatedRamMb,
           loader: target.loader,
           minecraftVersion: target.minecraftVersion,
+          javaPath: target.javaVersion,
         }),
       });
 

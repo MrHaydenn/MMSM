@@ -204,9 +204,7 @@ export const ConsoleView: React.FC = () => {
                 Server Crash / Process Exit Detected
               </h3>
               <p className="text-xs text-rose-300/90 leading-relaxed mt-0.5">
-                {logs.some((l) => l.message.includes('69.0'))
-                  ? 'Fabric / Minecraft bundler requires Java 25 (class file 69.0). Install Java 25 below to fix!'
-                  : 'Process exited unexpectedly. Ensure the correct Java runtime (Java 21 or Java 25) is installed.'}
+                Process exited unexpectedly. Ensure the correct Java runtime (Java 21 LTS for modern cores or Java 17 for 1.17–1.20) is installed.
               </p>
               {installStatus && (
                 <p className="text-xs text-emerald-300 font-mono font-bold mt-1.5 flex items-center gap-1.5">
@@ -230,15 +228,7 @@ export const ConsoleView: React.FC = () => {
               className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-500/50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <Download className="w-3.5 h-3.5 text-emerald-200" />
-              <span>{isInstallingJava === '21' ? 'Installing 21...' : 'Install Java 21'}</span>
-            </button>
-            <button
-              onClick={() => handleInstallJavaInConsole('25')}
-              disabled={!!isInstallingJava}
-              className="px-3 py-1.5 rounded-lg bg-purple-800 hover:bg-purple-700 text-white border border-purple-500/50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              <Download className="w-3.5 h-3.5 text-purple-200" />
-              <span>{isInstallingJava === '25' ? 'Installing 25...' : 'Install Java 25'}</span>
+              <span>{isInstallingJava === '21' ? 'Installing 21...' : 'Install Java 21 LTS'}</span>
             </button>
             <button
               onClick={() => restartServer(activeServer.id)}

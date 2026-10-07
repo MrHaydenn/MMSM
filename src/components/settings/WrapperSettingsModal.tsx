@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   X,
@@ -81,6 +81,23 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
   const [updateCheckNotice, setUpdateCheckNotice] = useState<string | null>(null);
   const [isInstallingJava, setIsInstallingJava] = useState<string | null>(null);
   const [javaStatusNotice, setJavaStatusNotice] = useState<string | null>(null);
+  const [installedRuntimes, setInstalledRuntimes] = useState<{ id: string; name: string; path: string }[]>([]);
+
+  const fetchRuntimes = async () => {
+    try {
+      const res = await fetch('/api/system/install-java/status');
+      const data = await res.json();
+      if (data.runtimes) {
+        setInstalledRuntimes(data.runtimes);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchRuntimes();
+    }
+  }, [isOpen]);
 
   const handleTriggerJavaInstall = async (ver: '25' | '21' | '17' | '8') => {
     setIsInstallingJava(ver);
@@ -712,15 +729,15 @@ Read-Host "MMSM stopped. Press Enter to close"
                   <div className="flex items-center gap-2">
                     <Cpu className="w-4 h-4 text-emerald-400" />
                     <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
-                      Java Runtimes & Version Compatibility Matrix
+                      Java Runtimes & Multi-Version Manager
                     </span>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 font-semibold">
-                    Multi-Runtime Ready (Java 8 - 25)
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-semibold">
+                    Multi-Runtime (Java 8, 17, 21 LTS, 25)
                   </span>
                 </div>
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  MMSM stores isolated, portable OpenJDK runtimes inside <code className="text-zinc-200 bg-zinc-950 px-1.5 py-0.5 rounded font-mono">./runtimes/</code> so your host host environment stays clean. Fabric 0.16.10+ and Minecraft 1.21.4+ automatically route to <strong className="text-purple-300">Eclipse Temurin JDK 25</strong>, while older server cores link to their corresponding JDK versions.
+                  MMSM manages isolated, portable OpenJDK runtimes inside <code className="text-zinc-200 bg-zinc-950 px-1.5 py-0.5 rounded font-mono">./runtimes/</code> so your host environment remains clean. Minecraft 1.20.5+ and Fabric 0.16.x automatically link to <strong className="text-emerald-300">Eclipse Temurin Java 21 LTS</strong>, while older server cores link to Java 17 or Java 8.
                 </p>
 
                 {javaStatusNotice && (
@@ -731,66 +748,61 @@ Read-Host "MMSM stopped. Press Enter to close"
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                  {/* JAVA 25 */}
-                  <div className="p-3 bg-zinc-950 border border-purple-800/40 rounded-xl space-y-2 text-xs">
+                  {/* JAVA 21 LTS (RECOMMENDED) */}
+                  <div className="p-3 bg-zinc-950 border border-emerald-800/50 rounded-xl space-y-2 text-xs">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="font-bold text-purple-200 block">Eclipse Temurin JDK 25</span>
-                        <span className="text-[10px] text-zinc-400">Class File 69.0 · MC 1.21.4+ / Fabric 0.16.10+</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-emerald-200">Eclipse Temurin Java 21 LTS</span>
+                          <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-emerald-900/80 text-emerald-300 font-bold">Standard</span>
+                        </div>
+                        <span className="text-[10px] text-zinc-400">Class File 65.0 · Minecraft 1.20.5 – 1.21.x / Fabric 0.16.x</span>
                       </div>
-                      <button
-                        type="button"
-                        disabled={isInstallingJava === '25'}
-                        onClick={() => handleTriggerJavaInstall('25')}
-                        className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow transition-colors disabled:opacity-50 shrink-0"
-                      >
-                        {isInstallingJava === '25' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        <span>{isInstallingJava === '25' ? 'Installing...' : 'Install Java 25'}</span>
-                      </button>
-                    </div>
-                    <p className="text-[10px] text-zinc-500 font-mono">
-                      Runtime Path: <span className="text-purple-300">./runtimes/java-25/bin/java</span>
-                    </p>
-                  </div>
-
-                  {/* JAVA 21 */}
-                  <div className="p-3 bg-zinc-950 border border-emerald-800/40 rounded-xl space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-bold text-emerald-200 block">Eclipse Temurin JDK 21 LTS</span>
-                        <span className="text-[10px] text-zinc-400">Class File 65.0 · MC 1.20.5 – 1.21.3 / Paper / NeoForge</span>
-                      </div>
-                      <button
-                        type="button"
-                        disabled={isInstallingJava === '21'}
-                        onClick={() => handleTriggerJavaInstall('21')}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow transition-colors disabled:opacity-50 shrink-0"
-                      >
-                        {isInstallingJava === '21' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        <span>{isInstallingJava === '21' ? 'Installing...' : 'Install Java 21'}</span>
-                      </button>
+                      {installedRuntimes.some((r) => r.id === 'mmsm-java21') ? (
+                        <span className="px-2 py-1 rounded bg-emerald-950 border border-emerald-800 text-emerald-300 text-[10px] font-mono font-bold flex items-center gap-1 shrink-0">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          <span>Installed</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isInstallingJava === '21'}
+                          onClick={() => handleTriggerJavaInstall('21')}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow transition-colors disabled:opacity-50 shrink-0"
+                        >
+                          {isInstallingJava === '21' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          <span>{isInstallingJava === '21' ? 'Installing...' : 'Install Java 21'}</span>
+                        </button>
+                      )}
                     </div>
                     <p className="text-[10px] text-zinc-500 font-mono">
                       Runtime Path: <span className="text-emerald-300">./runtimes/java-21/bin/java</span>
                     </p>
                   </div>
 
-                  {/* JAVA 17 */}
+                  {/* JAVA 17 LTS */}
                   <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2 text-xs">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="font-bold text-zinc-200 block">Eclipse Temurin JDK 17 LTS</span>
-                        <span className="text-[10px] text-zinc-400">Class File 61.0 · MC 1.17 – 1.20.4</span>
+                        <span className="font-bold text-zinc-200 block">Eclipse Temurin Java 17 LTS</span>
+                        <span className="text-[10px] text-zinc-400">Class File 61.0 · Minecraft 1.17 – 1.20.4</span>
                       </div>
-                      <button
-                        type="button"
-                        disabled={isInstallingJava === '17'}
-                        onClick={() => handleTriggerJavaInstall('17')}
-                        className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-zinc-700 disabled:opacity-50 shrink-0"
-                      >
-                        {isInstallingJava === '17' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        <span>{isInstallingJava === '17' ? 'Installing...' : 'Install Java 17'}</span>
-                      </button>
+                      {installedRuntimes.some((r) => r.id === 'mmsm-java17') ? (
+                        <span className="px-2 py-1 rounded bg-zinc-900 border border-zinc-700 text-emerald-400 text-[10px] font-mono font-bold flex items-center gap-1 shrink-0">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          <span>Installed</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isInstallingJava === '17'}
+                          onClick={() => handleTriggerJavaInstall('17')}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-zinc-700 disabled:opacity-50 shrink-0"
+                        >
+                          {isInstallingJava === '17' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          <span>{isInstallingJava === '17' ? 'Installing...' : 'Install Java 17'}</span>
+                        </button>
+                      )}
                     </div>
                     <p className="text-[10px] text-zinc-500 font-mono">
                       Runtime Path: <span className="text-zinc-300">./runtimes/java-17/bin/java</span>
@@ -801,21 +813,60 @@ Read-Host "MMSM stopped. Press Enter to close"
                   <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2 text-xs">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="font-bold text-zinc-200 block">Eclipse Temurin JDK 8</span>
+                        <span className="font-bold text-zinc-200 block">Eclipse Temurin Java 8</span>
                         <span className="text-[10px] text-zinc-400">Class File 52.0 · Legacy MC 1.8 – 1.16.5</span>
                       </div>
-                      <button
-                        type="button"
-                        disabled={isInstallingJava === '8'}
-                        onClick={() => handleTriggerJavaInstall('8')}
-                        className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-zinc-700 disabled:opacity-50 shrink-0"
-                      >
-                        {isInstallingJava === '8' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        <span>{isInstallingJava === '8' ? 'Installing...' : 'Install Java 8'}</span>
-                      </button>
+                      {installedRuntimes.some((r) => r.id === 'mmsm-java8') ? (
+                        <span className="px-2 py-1 rounded bg-zinc-900 border border-zinc-700 text-emerald-400 text-[10px] font-mono font-bold flex items-center gap-1 shrink-0">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          <span>Installed</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isInstallingJava === '8'}
+                          onClick={() => handleTriggerJavaInstall('8')}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-zinc-700 disabled:opacity-50 shrink-0"
+                        >
+                          {isInstallingJava === '8' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          <span>{isInstallingJava === '8' ? 'Installing...' : 'Install Java 8'}</span>
+                        </button>
+                      )}
                     </div>
                     <p className="text-[10px] text-zinc-500 font-mono">
                       Runtime Path: <span className="text-zinc-300">./runtimes/java-8/bin/java</span>
+                    </p>
+                  </div>
+
+                  {/* JAVA 25 (EXPERIMENTAL) */}
+                  <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-zinc-300">Eclipse Temurin Java 25</span>
+                          <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-800 font-semibold">Experimental</span>
+                        </div>
+                        <span className="text-[10px] text-zinc-500">Class File 69.0 · Next-Gen Early Access</span>
+                      </div>
+                      {installedRuntimes.some((r) => r.id === 'mmsm-java25') ? (
+                        <span className="px-2 py-1 rounded bg-purple-950/80 border border-purple-800 text-purple-300 text-[10px] font-mono font-bold flex items-center gap-1 shrink-0">
+                          <CheckCircle2 className="w-3 h-3 text-purple-400" />
+                          <span>Installed</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isInstallingJava === '25'}
+                          onClick={() => handleTriggerJavaInstall('25')}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-zinc-700 disabled:opacity-50 shrink-0"
+                        >
+                          {isInstallingJava === '25' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          <span>{isInstallingJava === '25' ? 'Installing...' : 'Install Java 25'}</span>
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 font-mono">
+                      Runtime Path: <span className="text-zinc-400">./runtimes/java-25/bin/java</span>
                     </p>
                   </div>
                 </div>

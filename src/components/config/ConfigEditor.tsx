@@ -22,6 +22,8 @@ import {
   Trash2,
   AlertTriangle,
   Download,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
@@ -85,27 +87,119 @@ export const ConfigEditor: React.FC = () => {
 
   const [rawText, setRawText] = useState(generateRawProperties());
 
-  const [selectedJavaVer, setSelectedJavaVer] = useState<string>(activeServer.javaVersion || 'auto');
+  // Helper to normalize any stored java string to an option key
+  const getJavaOptionKey = (val?: string): string => {
+    if (!val || val === 'auto') return 'auto';
+    if (val.startsWith('/') || val.startsWith('C:\\') || val.includes('\\') || (val.includes('/') && !val.includes(' '))) return 'custom';
+    const lower = val.toLowerCase();
+    if (lower.includes('21')) return 'java-21';
+    if (lower.includes('17')) return 'java-17';
+    if (lower.includes('8')) return 'java-8';
+    if (lower.includes('25')) return 'java-25';
+    if (lower.includes('system') || lower === 'java') return 'system-default';
+    return 'custom';
+  };
+
+  const [selectedJavaKey, setSelectedJavaKey] = useState<string>(getJavaOptionKey(activeServer.javaVersion));
   const [customJavaPathInput, setCustomJavaPathInput] = useState<string>('');
-  const [isInstallingJava25, setIsInstallingJava25] = useState(false);
+  const [isInstallingJava, setIsInstallingJava] = useState<string | null>(null);
+  const [installedRuntimes, setInstalledRuntimes] = useState<{ id: string; name: string; path: string }[]>([]);
   const [javaNotice, setJavaNotice] = useState<string | null>(null);
+  const [javaSavedNotice, setJavaSavedNotice] = useState<string | null>(null);
+
+  const fetchRuntimes = async () => {
+    try {
+      const res = await fetch('/api/system/install-java/status');
+      const data = await res.json();
+      if (data.runtimes) {
+        setInstalledRuntimes(data.runtimes);
+      }
+    } catch {}
+  };
 
   React.useEffect(() => {
-    if (activeServer.javaVersion) {
-      if (activeServer.javaVersion.startsWith('/') || activeServer.javaVersion.startsWith('C:\\') || activeServer.javaVersion.includes('\\') || activeServer.javaVersion.includes('/')) {
-        setSelectedJavaVer('custom');
-        setCustomJavaPathInput(activeServer.javaVersion);
-      } else {
-        setSelectedJavaVer(activeServer.javaVersion);
-      }
-    } else {
-      setSelectedJavaVer('auto');
+    fetchRuntimes();
+  }, []);
+
+  React.useEffect(() => {
+    const key = getJavaOptionKey(activeServer.javaVersion);
+    setSelectedJavaKey(key);
+    if (key === 'custom' && activeServer.javaVersion) {
+      setCustomJavaPathInput(activeServer.javaVersion);
     }
   }, [activeServer.id, activeServer.javaVersion]);
 
+  const getFinalJavaString = (key: string): string => {
+    switch (key) {
+      case 'java-21': return 'Java 21 (Temurin-21 LTS)';
+      case 'java-17': return 'Java 17 (Temurin-17 LTS)';
+      case 'java-8': return 'Java 8 (Temurin-8)';
+      case 'java-25': return 'Java 25 (Temurin-25 Experimental)';
+      case 'system-default': return 'system-default';
+      case 'custom': return customJavaPathInput.trim() || 'auto';
+      case 'auto':
+      default:
+        return 'auto';
+    }
+  };
+
+  const handleSaveJavaVersion = (keyToSave?: string) => {
+    const key = keyToSave || selectedJavaKey;
+    const finalJavaVer = getFinalJavaString(key);
+    updateProperties(activeServer.id, formData, { javaVersion: finalJavaVer });
+    setJavaNotice(null);
+    setJavaSavedNotice(`Successfully linked server "${activeServer.name}" to: ${finalJavaVer}`);
+    setTimeout(() => setJavaSavedNotice(null), 4000);
+  };
+
+  const handleInstallSelectedJava = async (ver: '21' | '17' | '8' | '25') => {
+    setIsInstallingJava(ver);
+    setJavaNotice(`Downloading & configuring Eclipse Temurin JDK ${ver} into ./runtimes/java-${ver}...`);
+    try {
+      const res = await fetch('/api/system/install-java', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: ver }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        let isDone = false;
+        let attempts = 0;
+        while (!isDone && attempts < 120) {
+          await new Promise((r) => setTimeout(r, 1000));
+          attempts++;
+          try {
+            const stRes = await fetch('/api/system/install-java/status');
+            const stData = await stRes.json();
+            if (stData.runtimes) setInstalledRuntimes(stData.runtimes);
+            const job = stData.jobs?.[ver];
+            if (job) {
+              if (job.status === 'completed') {
+                setJavaNotice(`Eclipse Temurin JDK ${ver} installed successfully in ./runtimes/java-${ver}!`);
+                isDone = true;
+              } else if (job.status === 'failed') {
+                setJavaNotice(`Install failed: ${job.error || 'Unknown error'}`);
+                isDone = true;
+              } else if (job.message) {
+                setJavaNotice(job.message);
+              }
+            }
+          } catch {}
+        }
+      } else {
+        setJavaNotice(`Install failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch {
+      setJavaNotice('Network error while requesting Java install.');
+    } finally {
+      setIsInstallingJava(null);
+      fetchRuntimes();
+    }
+  };
+
   const handleSaveVisual = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalJavaVer = selectedJavaVer === 'custom' ? customJavaPathInput : selectedJavaVer;
+    const finalJavaVer = getFinalJavaString(selectedJavaKey);
     updateProperties(activeServer.id, formData, { javaVersion: finalJavaVer });
     setServerRam(activeServer.id, minRamMb, maxRamMb);
     toggleSleepMode(activeServer.id, sleepEnabled, sleepTimeout);
@@ -554,103 +648,147 @@ export const ConfigEditor: React.FC = () => {
           <div className="bg-[#11151c] border border-zinc-800 rounded-xl p-5 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
               <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-purple-400" />
-                <h3 className="text-sm font-semibold text-zinc-100">Target Java Runtime & Version Link</h3>
+                <Cpu className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-semibold text-zinc-100">Java Runtime & Server Linking</h3>
               </div>
               <button
                 type="button"
-                disabled={isInstallingJava25}
-                onClick={async () => {
-                  setIsInstallingJava25(true);
-                  setJavaNotice('Downloading & linking Eclipse Temurin JDK 25 into ./runtimes/java-25...');
-                  try {
-                    const res = await fetch('/api/system/install-java25', { method: 'POST' });
-                    const data = await res.json();
-                    if (data.success) {
-                      let isDone = false;
-                      let attempts = 0;
-                      while (!isDone && attempts < 120) {
-                        await new Promise((r) => setTimeout(r, 1000));
-                        attempts++;
-                        try {
-                          const stRes = await fetch('/api/system/install-java/status');
-                          const stData = await stRes.json();
-                          const job = stData.jobs?.['25'];
-                          if (job) {
-                            if (job.status === 'completed') {
-                              setSelectedJavaVer('Java 25 (Eclipse Temurin JDK 25)');
-                              setJavaNotice('Eclipse Temurin JDK 25 installed & linked to this server!');
-                              isDone = true;
-                            } else if (job.status === 'failed') {
-                              setJavaNotice(`Install failed: ${job.error || 'Unknown error'}`);
-                              isDone = true;
-                            } else if (job.message) {
-                              setJavaNotice(job.message);
-                            }
-                          }
-                        } catch {}
-                      }
-                    } else {
-                      setJavaNotice(`Install failed: ${data.error}`);
-                    }
-                  } catch {
-                    setJavaNotice('Error connecting to backend Java installer.');
-                  } finally {
-                    setIsInstallingJava25(false);
-                  }
-                }}
-                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md shadow-purple-950/40 disabled:opacity-50"
+                onClick={fetchRuntimes}
+                className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono flex items-center gap-1.5 cursor-pointer"
+                title="Refresh installed runtimes"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>{isInstallingJava25 ? 'Installing...' : '1-Click Install JDK 25'}</span>
+                <RefreshCw className="w-3 h-3" />
+                <span>Refresh Runtimes</span>
               </button>
             </div>
 
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              MMSM can automatically match the proper Java version for your server core, or you can manually link this specific server to any installed JDK or custom binary path.
+            </p>
+
             {javaNotice && (
-              <div className="p-3 bg-purple-950/40 border border-purple-800/60 rounded-xl text-xs text-purple-300 font-mono flex items-center gap-2">
+              <div className="p-3 bg-purple-950/40 border border-purple-800/60 rounded-xl text-xs text-purple-300 font-mono flex items-center gap-2 animate-in fade-in">
                 <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
                 <span>{javaNotice}</span>
               </div>
             )}
 
+            {javaSavedNotice && (
+              <div className="p-3 bg-emerald-950/50 border border-emerald-800/80 rounded-xl text-xs text-emerald-300 font-mono flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{javaSavedNotice}</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="space-y-1.5">
-                <label className="text-zinc-300 font-medium block">Select Installed Java Runtime</label>
+                <label className="text-zinc-300 font-medium block">Selected Java Runtime</label>
                 <select
-                  value={selectedJavaVer}
-                  onChange={(e) => setSelectedJavaVer(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 font-mono focus:outline-none focus:border-purple-500/60"
+                  value={selectedJavaKey}
+                  onChange={(e) => {
+                    const newKey = e.target.value;
+                    setSelectedJavaKey(newKey);
+                    handleSaveJavaVersion(newKey);
+                  }}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 font-mono focus:outline-none focus:border-emerald-500/60"
                 >
-                  <option value="auto">Auto-Detect (Eclipse Temurin JDK 25 for Fabric/MC 1.21+)</option>
-                  <option value="Java 25 (Eclipse Temurin JDK 25)">Eclipse Temurin JDK 25 (Managed ./runtimes/java-25)</option>
-                  <option value="Java 21 (Eclipse Temurin JDK 21)">Eclipse Temurin JDK 21 LTS (Managed ./runtimes/java-21)</option>
-                  <option value="Java 17 (Eclipse Temurin JDK 17)">Eclipse Temurin JDK 17 LTS (Managed ./runtimes/java-17)</option>
-                  <option value="Java 8 (Eclipse Temurin JDK 8)">Eclipse Temurin JDK 8 (Managed ./runtimes/java-8)</option>
+                  <option value="auto">Auto-Detect Recommended (Java 21 for 1.20.5+ / Fabric)</option>
+                  <option value="java-21">Eclipse Temurin Java 21 LTS (Managed ./runtimes/java-21)</option>
+                  <option value="java-17">Eclipse Temurin Java 17 LTS (Managed ./runtimes/java-17)</option>
+                  <option value="java-8">Eclipse Temurin Java 8 (Managed ./runtimes/java-8)</option>
+                  <option value="java-25">Eclipse Temurin Java 25 (Managed ./runtimes/java-25 Experimental)</option>
                   <option value="system-default">System Default Java (PATH)</option>
-                  <option value="custom">Custom Binary Path...</option>
+                  <option value="custom">Custom Binary Absolute Path...</option>
                 </select>
                 <p className="text-[11px] text-zinc-400 leading-relaxed mt-1">
-                  {activeServer.loader === 'fabric' || activeServer.minecraftVersion.startsWith('1.21')
-                    ? '⚡ Fabric 0.16.10+ / MC 1.21.4+ automatically uses Eclipse Temurin JDK 25 to prevent Class 69.0 errors.'
-                    : 'Select specific JDK version or let MMSM auto-match based on server core.'}
+                  {selectedJavaKey === 'auto'
+                    ? `⚡ Auto mode will launch ${activeServer.loader.toUpperCase()} ${activeServer.minecraftVersion} using Java 21 LTS.`
+                    : selectedJavaKey === 'java-21'
+                    ? 'Recommended for Minecraft 1.20.5 – 1.21.x and Fabric 0.16.x.'
+                    : selectedJavaKey === 'java-17'
+                    ? 'Recommended for Minecraft 1.17 to 1.20.4.'
+                    : selectedJavaKey === 'java-8'
+                    ? 'Recommended for Minecraft 1.12.2 to 1.16.5.'
+                    : selectedJavaKey === 'java-25'
+                    ? 'Early-access / experimental JDK.'
+                    : 'System PATH executable.'}
                 </p>
               </div>
 
-              {selectedJavaVer === 'custom' && (
-                <div className="space-y-1.5">
-                  <label className="text-zinc-300 font-medium block">Custom java.exe / java Binary Absolute Path</label>
-                  <input
-                    type="text"
-                    value={customJavaPathInput}
-                    onChange={(e) => setCustomJavaPathInput(e.target.value)}
-                    placeholder="C:\Program Files\Java\jdk-25\bin\java.exe"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 font-mono text-xs focus:outline-none focus:border-purple-500/60"
-                  />
-                  <p className="text-[11px] text-zinc-500 font-mono">
-                    Absolute executable path on the host server system.
-                  </p>
-                </div>
-              )}
+              {/* Status and 1-Click Install Card for Selected Version */}
+              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg space-y-2">
+                <span className="text-zinc-400 font-medium block text-[11px] uppercase tracking-wide">
+                  Runtime Availability on Host
+                </span>
+
+                {selectedJavaKey === 'custom' ? (
+                  <div className="space-y-1.5">
+                    <label className="text-zinc-300 font-medium block">Custom java.exe / java Binary Path</label>
+                    <input
+                      type="text"
+                      value={customJavaPathInput}
+                      onChange={(e) => setCustomJavaPathInput(e.target.value)}
+                      placeholder="C:\Program Files\Java\jdk-21\bin\java.exe"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-zinc-100 font-mono text-xs focus:outline-none focus:border-emerald-500/60"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    {(() => {
+                      const ver = selectedJavaKey === 'java-17' ? '17' : selectedJavaKey === 'java-8' ? '8' : selectedJavaKey === 'java-25' ? '25' : '21';
+                      const isInstalled = installedRuntimes.some((r) => r.id === `mmsm-java${ver}`);
+                      return (
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="space-y-0.5">
+                            <span className="font-mono text-zinc-200 block text-xs">
+                              Java {ver} {ver === '21' || ver === '17' ? 'LTS' : ''}
+                            </span>
+                            <span className="text-[10px] text-zinc-400 font-mono">
+                              {isInstalled ? `Ready: ./runtimes/java-${ver}/bin/java` : 'Not installed in runtimes'}
+                            </span>
+                          </div>
+
+                          {isInstalled ? (
+                            <span className="px-2 py-1 rounded bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-[10px] font-mono font-bold flex items-center gap-1 shrink-0">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span>Installed</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!!isInstallingJava}
+                              onClick={() => handleInstallSelectedJava(ver as any)}
+                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0 shadow"
+                            >
+                              {isInstallingJava === ver ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                              <span>{isInstallingJava === ver ? 'Installing...' : `Install Java ${ver}`}</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Dedicated Save Java Version Bar */}
+            <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-mono">
+                <span className="text-zinc-400">Current Linked Version:</span>
+                <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-700 text-emerald-400 font-bold">
+                  {activeServer.javaVersion || 'auto'}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleSaveJavaVersion()}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-950/50 cursor-pointer transition-all"
+              >
+                <Check className="w-4 h-4" />
+                <span>Save Java Link for {activeServer.name}</span>
+              </button>
             </div>
           </div>
           <div className="bg-[#11151c] border border-zinc-800 rounded-xl p-5 space-y-4">

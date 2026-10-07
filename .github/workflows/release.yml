@@ -1,0 +1,67 @@
+name: Publish MMSM release
+on:
+  push:
+    branches: [main]
+    paths: [release-request.json]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mmsm-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'MrHaydenn/MMSM' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Validate approved version
+        id: version
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from mmsm import __version__
+          from mmsm.updater import version
+          approved = json.loads(Path('release-request.json').read_text())['version']
+          version(approved)
+          assert approved == __version__, 'Release approval must match the program version'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('number=' + approved + '\n')
+          PY
+      - name: Install test dependencies
+        run: python -m pip install psutil Pillow
+      - name: Verify release
+        run: |
+          python -m unittest discover -s tests -v
+          node --test tests/ui.test.cjs
+          python -m compileall -q mmsm
+          node --check mmsm/static/app.js
+      - name: Build packages
+        env:
+          VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          python tools/build_release.py --url "https://github.com/MrHaydenn/MMSM/releases/download/v${VERSION}/MMSM-${VERSION}-update.zip"
+          git archive --format=zip --prefix=mmsm/ --output="release/MMSM-${VERSION}.zip" HEAD
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          gh release create "v${VERSION}" "release/MMSM-${VERSION}-update.zip" "release/MMSM-${VERSION}.zip" release/latest.json --target "$GITHUB_SHA" --title "MMSM ${VERSION}" --notes-file RELEASE_NOTES.md --draft
+          gh release edit "v${VERSION}" --draft=false --latest

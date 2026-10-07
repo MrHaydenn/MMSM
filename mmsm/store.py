@@ -59,9 +59,11 @@ def password_matches(password, stored):
         return False
 
 
+GITHUB_UPDATE_FEED = 'https://github.com/MrHaydenn/MMSM/releases/latest/download/latest.json'
+
 DEFAULTS = {'bind_host':'0.0.0.0', 'public_origin':'', 'web_port': 11015, 'default_loader': 'fabric', 'default_memory_mb': 4096,
             'default_sleep': False, 'idle_minutes': 15, 'retention_days': 30,
-            'theme': 'forest', 'update_feed': '', 'wrapper_update_checks': True, 'update_interval_hours': 6, 'upstream_contact': '', 'auto_eula': True,
+            'theme': 'forest', 'update_feed': GITHUB_UPDATE_FEED, 'wrapper_update_checks': True, 'update_interval_hours': 6, 'upstream_contact': '', 'auto_eula': True,
             'accent_color': '#a6ec80', 'background_color': '#0b1010', 'panel_color': '#111918', 'navbar_color': '#101817', 'hover_color': '#24342c'}
 
 
@@ -110,6 +112,11 @@ class Store:
         if not self.db.execute("SELECT 1 FROM settings WHERE key='_port_11015_migrated'").fetchone():
             self.db.execute("UPDATE settings SET value='11015' WHERE key='web_port' AND value='3000'")
             self.db.execute("INSERT INTO settings(key,value) VALUES('_port_11015_migrated','true')")
+        # Bootstrap older installs that had no release host; preserve custom feeds.
+        if not self.db.execute("SELECT 1 FROM settings WHERE key='_github_feed_migrated'").fetchone():
+            self.db.execute("UPDATE settings SET value=? WHERE key='update_feed' AND value=?",
+                            (json.dumps(GITHUB_UPDATE_FEED), json.dumps('')))
+            self.db.execute("INSERT INTO settings(key,value) VALUES('_github_feed_migrated','true')")
         self.db.commit()
         with contextlib.suppress(OSError):
             os.chmod(self.root, 0o700)

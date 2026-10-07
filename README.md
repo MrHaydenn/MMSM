@@ -2,7 +2,7 @@
 
 **MrHaydenn’s Minecraft Server Manager** — a self-hosted Minecraft Java server wrapper with a WebGUI, Modrinth integration, managed Java, and wake-on-ping.
 
-This is a working **0.7.3 preview**, with source and integration tests. The backend has been exercised locally, including a real JVM protocol fixture. The Modrinth fix was checked against the live API and a real Fabric API JAR was downloaded, checksum-verified and installed into a temporary test server folder. A real Minecraft distribution was not booted for this release. Browser layout remains unverified in this environment. See [VERIFICATION.md](docs/VERIFICATION.md) for the exact test boundary.
+This is a working **0.7.4 preview**, with source and integration tests. The backend has been exercised locally, including a real JVM protocol fixture. The Modrinth fix was checked against the live API and a real Fabric API JAR was downloaded, checksum-verified and installed into a temporary test server folder. A real Minecraft distribution was not booted for this release. Browser layout remains unverified in this environment. See [VERIFICATION.md](docs/VERIFICATION.md) for the exact test boundary.
 
 ## Upgrade from earlier versions
 
@@ -20,7 +20,16 @@ Startup installs missing `psutil` and Pillow into `dependencies/` using this Pyt
 
 **Automatic EULA acceptance now defaults ON** for fresh/unset settings, as requested. An explicitly saved choice is preserved on upgrade; change it in Settings if needed. Port 11015 remains the fresh-install default.
 
-## New in 0.7.3
+## New in 0.7.4
+
+MMSM now checks the official GitHub release feed by default:
+`https://github.com/MrHaydenn/MMSM/releases/latest/download/latest.json`
+
+Existing blank feeds migrate once; custom feeds and disabled periodic checks are preserved. Settings offers Check for updates and Update MMSM, with six-hour background checks and update notifications. Installation still requires a click and stopped Minecraft servers. The verified installer preserves accounts, settings and worlds.
+
+**Updating from 0.7.3:** paste the feed URL above into Settings, save, click Check for updates, stop Minecraft servers, then click Update MMSM. No manual ZIP replacement is needed.
+
+## Earlier changes from 0.7.3
 
 - Fixed public-domain login returning “Please sign in” and account/settings actions reporting CSRF errors when another application sets a parent-domain cookie containing raw JSON. MMSM now parses its own session cookies independently; unrelated cookie formats cannot hide a valid session. Duplicate session-cookie names are rejected rather than guessed. Origin checks, CSRF validation, Secure cookies and session revocation remain enforced.
 - Stop MMSM, replace the program files while preserving `data`, `Servers` and backups, restart with `start.bat`, then refresh and sign in at your HTTPS Public URL. No password reset or proxy changes are required for this parsing fix.
@@ -61,7 +70,7 @@ After replacing program files, run `start.bat` and open **http://127.0.0.1:11015
 - **MMSM updates** in Settings: public HTTPS release feed, Check for updates, Update MMSM, and optional six-hour checks (enabled by default once a feed is configured). Available updates create a notification linking to Settings. Nothing downloads or installs automatically beyond the small release manifest; installation requires your Update click.
 - The updater requires all Minecraft servers stopped and operations finished. It checks the package SHA-256, paths, size limits, Python syntax and embedded version; stages program files; stops/restarts MMSM; and reloads the browser after reconnection. Accounts, sessions, settings, worlds, archives, dependencies and saved port stay in place. AutoStart servers start after restart. One previous program backup is kept under `data/updates/rollback`; failed file replacement rolls back. This is not an automatic health rollback if a future release starts but contains an application bug.
 
-**No public release feed is configured or published yet.** See [RELEASING.md](docs/RELEASING.md) for building and publishing a version you approve. Install 0.6 manually once to get the updater.
+**Official releases are published on GitHub; the default feed above follows the latest stable release.** See [RELEASING.md](docs/RELEASING.md) for building and publishing a version you approve. Install 0.6 manually once to get the updater.
 
 ## Earlier changes from 0.5
 

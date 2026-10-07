@@ -40,7 +40,7 @@ HTTP 127.0.0.1 POST /api/login
 HTTP 127.0.0.1 GET /api/dashboard
 HTTP 127.0.0.1 GET /api/users
 HTTP 127.0.0.1 POST /api/servers
-HTTP 127.0.0.1 DELETE /api/users/f47c7ac3d635d78e78935205
+HTTP 127.0.0.1 DELETE /api/users/7f32d503dc66b985f87ecf54
 HTTP 127.0.0.1 GET /api/dashboard
 ok
 test_failed_installer_log_is_preserved (test_manager.JavaProviderTests.test_failed_installer_log_is_preserved) ... ok
@@ -117,8 +117,8 @@ test_scheduler_checks_due_servers_only_and_failure_backs_off (test_v02.UpdateTes
 ok
 test_update_notice_only_targets_current_minecraft_and_loader (test_v02.UpdateTests.test_update_notice_only_targets_current_minecraft_and_loader) ... ok
 test_live_backup_saves_world_and_resumes_then_restart_replaces_process (test_v03.JVMBackupTests.test_live_backup_saves_world_and_resumes_then_restart_replaces_process) ... ok
-test_dependencies_use_project_local_target_and_fail_gracefully (test_v03.PlayerAndImageTests.test_dependencies_use_project_local_target_and_fail_gracefully) ... MMSM: installing missing telemetry/image dependencies into /tmp/tmpnm9a0thb/dependencies
-MMSM: installing missing telemetry/image dependencies into /tmp/tmpnm9a0thb/dependencies
+test_dependencies_use_project_local_target_and_fail_gracefully (test_v03.PlayerAndImageTests.test_dependencies_use_project_local_target_and_fail_gracefully) ... MMSM: installing missing telemetry/image dependencies into /tmp/tmp7xksr3t2/dependencies
+MMSM: installing missing telemetry/image dependencies into /tmp/tmp7xksr3t2/dependencies
 MMSM dependency setup could not finish: Command 'pip' timed out after 180 seconds 
 MMSM will continue. Check internet/pip and restart to retry.
 ok
@@ -261,8 +261,8 @@ ok
 test_vanilla_creation_and_install_routes (test_v06.HTTPChanges.test_vanilla_creation_and_install_routes) ... HTTP 127.0.0.1 POST /api/setup
 HTTP 127.0.0.1 POST /api/login
 HTTP 127.0.0.1 POST /api/servers
-HTTP 127.0.0.1 POST /api/servers/9522492c298fcb212afab57d/mods-install
-HTTP 127.0.0.1 POST /api/servers/9522492c298fcb212afab57d/project-install
+HTTP 127.0.0.1 POST /api/servers/71dbce0b14678bc339324d87/mods-install
+HTTP 127.0.0.1 POST /api/servers/71dbce0b14678bc339324d87/project-install
 ok
 test_normal_entrypoint_updates_reexecutes_and_preserves_account (test_v06.RestartIntegration.test_normal_entrypoint_updates_reexecutes_and_preserves_account) ... ok
 test_apply_preserves_worlds_data_and_keeps_program_backup (test_v06.Updates.test_apply_preserves_worlds_data_and_keeps_program_backup) ... ok
@@ -361,8 +361,10 @@ HTTP 127.0.0.1 GET /api/me
 HTTP 127.0.0.1 POST /api/logout
 HTTP 127.0.0.1 GET /api/me
 ok
+test_blank_migration_custom_feed_and_opt_out (test_v074.GitHubUpdates.test_blank_migration_custom_feed_and_opt_out) ... ok
+test_default_github_feed_and_notification (test_v074.GitHubUpdates.test_default_github_feed_and_notification) ... ok
 
 ----------------------------------------------------------------------
-Ran 111 tests in 27.488s
+Ran 113 tests in 28.515s
 
 OK

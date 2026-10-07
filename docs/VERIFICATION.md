@@ -1,3 +1,13 @@
+# Verification record — MMSM 0.7.4
+
+113 Python tests and 44 JavaScript behavior tests passed locally, with zero skips. Python compilation and JavaScript syntax checks passed.
+
+New tests verify the official GitHub default feed, update notification, one-time blank-feed migration, preserved custom feeds and preserved opt-out. Separately, the unchanged 0.7.3 updater was loaded from the previous distribution and successfully checked and staged the actual newly built 0.7.4 update ZIP using a local transport fixture. This validates old-client manifest, checksum and package compatibility. Existing tests cover transactional install, restart, account preservation and rollback.
+
+GitHub Actions repeats the suite before publishing the assets. Local tests do not exercise the user's Windows host or public proxy. Live release verification is separate from the local fixture check.
+
+---
+
 # Verification record — MMSM 0.7.3
 
 Build date: 2026-10-07. Linux / Python 3.12 / Java 17 / Node 24.

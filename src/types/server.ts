@@ -268,7 +268,7 @@ export interface DownloadItem {
   status: 'downloading' | 'installing' | 'completed' | 'failed';
   totalSizeBytes?: number;
   speedMbps?: number;
-  type: 'mod' | 'plugin' | 'modpack' | 'server_creation' | 'backup';
+  type: 'mod' | 'plugin' | 'modpack' | 'server_creation' | 'backup' | 'loader_update';
   startedAt: string;
   completedAt?: string;
 }

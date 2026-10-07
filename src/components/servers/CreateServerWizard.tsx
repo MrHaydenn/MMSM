@@ -435,6 +435,31 @@ export const CreateServerWizard: React.FC<CreateServerWizardProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Java 21 Notice for Fabric / Paper */}
+              {(loader === 'fabric' || loader === 'paper' || loader === 'neoforge') && (
+                <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-between text-xs gap-3">
+                  <div className="space-y-0.5">
+                    <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Java 21 LTS Requirement</span>
+                    </span>
+                    <p className="text-zinc-400 text-[11px] leading-relaxed">
+                      {loader.toUpperCase()} on Minecraft {minecraftVersion} requires Java 21. If Java 21 is missing on your host, MMSM auto-configures the managed JDK.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fetch('/api/system/install-java21', { method: 'POST' });
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shrink-0 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Auto-Install Java 21</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

@@ -661,6 +661,46 @@ Read-Host "MMSM stopped. Press Enter to close"
                 </div>
               </div>
 
+              {/* Java Environment Check & Runtime Management */}
+              <div className="p-4 bg-zinc-900/80 rounded-xl border border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-zinc-200 uppercase tracking-wide">
+                      Java Runtimes & System Environment Check
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold">
+                    MC 1.20.5+ / Fabric Ready
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Minecraft 1.20.5+ and Fabric 1.21+ require Java 21 LTS. If your device lacks Java 21 or has an old Java version, MMSM can automatically download and configure an isolated Adoptium Temurin OpenJDK 21 LTS runtime for your servers.
+                </p>
+
+                <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span className="font-semibold text-zinc-200">Managed Java 21 LTS (MMSM Runtime)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fetch('/api/system/install-java21', { method: 'POST' });
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Auto-Install Java 21 LTS</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 font-mono">
+                    Target Path: <span className="text-zinc-200">./runtimes/java-21/bin/java</span>
+                  </p>
+                </div>
+              </div>
+
               {/* Clean Slate & Sample Data Purge */}
               <div className="p-4 bg-rose-950/20 border border-rose-900/40 rounded-xl space-y-3">
                 <div className="flex items-center gap-2 text-rose-400">

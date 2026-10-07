@@ -13,11 +13,39 @@ app.use(express.json({ limit: '100mb' }));
 const PORT = Number(process.env.PORT) || 3000;
 const SERVERS_DIR = path.resolve(process.cwd(), 'servers');
 const BACKUPS_DIR = path.resolve(process.cwd(), 'backups');
+const DATA_DIR = path.resolve(process.cwd(), 'data');
+const RUNTIMES_DIR = path.resolve(process.cwd(), 'runtimes');
 
 if (!fs.existsSync(SERVERS_DIR)) fs.mkdirSync(SERVERS_DIR, { recursive: true });
 if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(RUNTIMES_DIR)) fs.mkdirSync(RUNTIMES_DIR, { recursive: true });
 
-// Process registry
+// Disk Files for Persistence
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const WRAPPER_FILE = path.join(DATA_DIR, 'wrapper_settings.json');
+const SERVERS_FILE = path.join(DATA_DIR, 'servers.json');
+
+// Helper for JSON storage
+function readJsonFile<T>(filePath: string, defaultValue: T): T {
+  try {
+    if (fs.existsSync(filePath)) {
+      const text = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(text) as T;
+    }
+  } catch {}
+  return defaultValue;
+}
+
+function writeJsonFile(filePath: string, data: any) {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (e: any) {
+    console.error(`Error writing ${filePath}:`, e.message);
+  }
+}
+
+// Process & Status registry
 interface ServerProcess {
   process: ChildProcess;
   serverId: string;
@@ -28,6 +56,7 @@ interface ServerProcess {
 }
 
 const activeProcesses: Record<string, ServerProcess> = {};
+const serverStatusMap: Record<string, 'online' | 'offline' | 'starting' | 'stopping' | 'crashed'> = {};
 const logsBuffer: Record<string, { id: string; timestamp: string; level: string; thread: string; message: string }[]> = {};
 
 function addServerLog(serverId: string, level: string, thread: string, message: string) {
@@ -74,10 +103,16 @@ function downloadFile(url: string, destPath: string): Promise<void> {
   });
 }
 
-// Helper to scan for installed Java versions on host system
+// Search for Java executables on system
 function findBestJavaExecutable(preferredPath?: string): { cmd: string; name: string } {
+  // Check standalone runtime in runtimes/ folder
+  const internalJava21 = path.join(RUNTIMES_DIR, 'java-21', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+  if (fs.existsSync(internalJava21)) {
+    return { cmd: internalJava21, name: 'Managed Java 21 LTS (MMSM Runtime)' };
+  }
+
   if (preferredPath && preferredPath !== 'java' && fs.existsSync(preferredPath)) {
-    return { cmd: `"${preferredPath}"`, name: preferredPath };
+    return { cmd: preferredPath, name: preferredPath };
   }
 
   if (os.platform() === 'win32') {
@@ -97,7 +132,6 @@ function findBestJavaExecutable(preferredPath?: string): { cmd: string; name: st
       path.join(localAppData, 'Programs', 'Eclipse Adoptium'),
     ];
 
-    // Priority: Java 21 LTS -> Java 17 LTS
     for (const targetVer of ['21', '17']) {
       for (const base of searchBases) {
         if (fs.existsSync(base)) {
@@ -107,7 +141,7 @@ function findBestJavaExecutable(preferredPath?: string): { cmd: string; name: st
               if (dir.toLowerCase().includes(targetVer)) {
                 const exePath = path.join(base, dir, 'bin', 'java.exe');
                 if (fs.existsSync(exePath)) {
-                  return { cmd: `"${exePath}"`, name: `Java ${targetVer} (${dir})` };
+                  return { cmd: exePath, name: `Java ${targetVer} (${dir})` };
                 }
               }
             }
@@ -120,17 +154,23 @@ function findBestJavaExecutable(preferredPath?: string): { cmd: string; name: st
   if (process.env.JAVA_HOME) {
     const jhExe = path.join(process.env.JAVA_HOME, 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
     if (fs.existsSync(jhExe)) {
-      return { cmd: `"${jhExe}"`, name: `JAVA_HOME (${process.env.JAVA_HOME})` };
+      return { cmd: jhExe, name: `JAVA_HOME (${process.env.JAVA_HOME})` };
     }
   }
 
-  return { cmd: 'java', name: 'System Default Java' };
+  return { cmd: 'java', name: 'System Default Java (PATH)' };
 }
 
-// Helper to list all detected Java JDKs on system
+// Scan installed Java Runtimes
 function scanInstalledJavaRuntimes() {
   const list: { id: string; name: string; path: string; isDefault?: boolean }[] = [];
-  list.push({ id: 'system-default', name: 'System Default Java (PATH)', path: 'java', isDefault: true });
+  
+  const internalJava21 = path.join(RUNTIMES_DIR, 'java-21', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+  if (fs.existsSync(internalJava21)) {
+    list.push({ id: 'mmsm-java21', name: 'Managed Java 21 LTS (Bundled Runtime)', path: internalJava21, isDefault: true });
+  }
+
+  list.push({ id: 'system-default', name: 'System Default Java (PATH)', path: 'java', isDefault: !fs.existsSync(internalJava21) });
 
   if (os.platform() === 'win32') {
     const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
@@ -170,11 +210,17 @@ function scanInstalledJavaRuntimes() {
   return list;
 }
 
-// 1. System Info API
+// ----------------------------------------------------
+// SYSTEM INFO & RUNTIMES
+// ----------------------------------------------------
 app.get('/api/system/info', (req, res) => {
   const totalMemGb = Math.round(os.totalmem() / (1024 * 1024 * 1024));
   const freeMemGb = Math.round(os.freemem() / (1024 * 1024 * 1024));
   const cpuCores = os.cpus().length;
+  const runtimes = scanInstalledJavaRuntimes();
+  const internalJava21 = path.join(RUNTIMES_DIR, 'java-21', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+  const hasJava21 = fs.existsSync(internalJava21) || runtimes.some((r) => r.name.toLowerCase().includes('21'));
+
   res.json({
     totalMemGb,
     freeMemGb,
@@ -182,15 +228,192 @@ app.get('/api/system/info', (req, res) => {
     platform: os.platform(),
     serversDirectory: SERVERS_DIR,
     backupsDirectory: BACKUPS_DIR,
-    detectedJavaRuntimes: scanInstalledJavaRuntimes(),
+    detectedJavaRuntimes: runtimes,
+    hasJava21Installed: hasJava21,
   });
 });
 
 app.get('/api/system/java-runtimes', (req, res) => {
-  res.json({ runtimes: scanInstalledJavaRuntimes() });
+  const runtimes = scanInstalledJavaRuntimes();
+  const internalJava21 = path.join(RUNTIMES_DIR, 'java-21', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+  const hasJava21 = fs.existsSync(internalJava21) || runtimes.some((r) => r.name.toLowerCase().includes('21'));
+  res.json({ runtimes, hasJava21Installed: hasJava21, internalJava21Path: internalJava21 });
 });
 
-// 2. Active Processes Status API
+// ----------------------------------------------------
+// AUTH & USERS API (Backend Disk Persistence)
+// ----------------------------------------------------
+app.get('/api/auth/state', (req, res) => {
+  const users = readJsonFile<any[]>(USERS_FILE, []);
+  const settings = readJsonFile<any>(WRAPPER_FILE, {});
+  res.json({
+    hasAccounts: users.length > 0,
+    allowPublicSignups: settings.allowPublicSignups ?? false,
+    users,
+  });
+});
+
+app.post('/api/auth/register-owner', (req, res) => {
+  const users = readJsonFile<any[]>(USERS_FILE, []);
+  const settings = readJsonFile<any>(WRAPPER_FILE, {});
+
+  if (users.length > 0 && !(settings.allowPublicSignups ?? false)) {
+    return res.status(403).json({ success: false, error: 'Registration is locked. An owner account already exists.' });
+  }
+
+  const { username, displayName, password } = req.body;
+  const cleanUsername = (username || '').trim().toLowerCase();
+  if (!cleanUsername) return res.status(400).json({ success: false, error: 'Username is required' });
+
+  const newUser = {
+    id: `user-${Date.now()}`,
+    username: cleanUsername,
+    displayName: (displayName || cleanUsername).trim(),
+    role: users.length === 0 ? 'admin' : 'operator',
+    password: password || '',
+    createdAt: new Date().toISOString(),
+    lastLogin: new Date().toISOString(),
+  };
+
+  const updatedUsers = [newUser, ...users];
+  writeJsonFile(USERS_FILE, updatedUsers);
+  res.json({ success: true, user: newUser });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const users = readJsonFile<any[]>(USERS_FILE, []);
+  const { username, password } = req.body;
+  const cleanUsername = (username || '').trim().toLowerCase();
+
+  const found = users.find((u) => u.username.toLowerCase() === cleanUsername);
+  if (!found) {
+    return res.status(401).json({ success: false, error: 'Invalid username or password' });
+  }
+
+  if (found.password && password && found.password !== password) {
+    return res.status(401).json({ success: false, error: 'Incorrect password' });
+  }
+
+  const updatedUser = { ...found, lastLogin: new Date().toISOString() };
+  const updatedList = users.map((u) => (u.id === found.id ? updatedUser : u));
+  writeJsonFile(USERS_FILE, updatedList);
+
+  res.json({ success: true, user: updatedUser });
+});
+
+app.post('/api/auth/users/save-all', (req, res) => {
+  const { users } = req.body;
+  if (Array.isArray(users)) {
+    writeJsonFile(USERS_FILE, users);
+    res.json({ success: true });
+  } else {
+    res.status(400).json({ error: 'Invalid users array' });
+  }
+});
+
+// ----------------------------------------------------
+// WRAPPER SETTINGS & SERVERS DATA API
+// ----------------------------------------------------
+app.get('/api/wrapper-settings', (req, res) => {
+  const settings = readJsonFile<any>(WRAPPER_FILE, {});
+  res.json({ settings });
+});
+
+app.post('/api/wrapper-settings', (req, res) => {
+  const { settings } = req.body;
+  if (settings) {
+    const existing = readJsonFile<any>(WRAPPER_FILE, {});
+    const updated = { ...existing, ...settings };
+    writeJsonFile(WRAPPER_FILE, updated);
+    res.json({ success: true, settings: updated });
+  } else {
+    res.status(400).json({ error: 'Settings object required' });
+  }
+});
+
+app.get('/api/servers-data', (req, res) => {
+  const servers = readJsonFile<any[]>(SERVERS_FILE, []);
+  // Sync status
+  const updated = servers.map((s) => ({
+    ...s,
+    status: serverStatusMap[s.id] || (activeProcesses[s.id] ? 'online' : 'offline'),
+  }));
+  res.json({ servers: updated });
+});
+
+app.post('/api/servers-data', (req, res) => {
+  const { servers } = req.body;
+  if (Array.isArray(servers)) {
+    writeJsonFile(SERVERS_FILE, servers);
+    res.json({ success: true });
+  } else {
+    res.status(400).json({ error: 'Servers array required' });
+  }
+});
+
+// ----------------------------------------------------
+// AUTO-INSTALL JAVA 21 LTS
+// ----------------------------------------------------
+app.post('/api/system/install-java21', async (req, res) => {
+  const targetDir = path.join(RUNTIMES_DIR, 'java-21');
+  const javaExe = path.join(targetDir, 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+
+  if (fs.existsSync(javaExe)) {
+    return res.json({ success: true, installed: true, path: javaExe, message: 'Java 21 LTS is already installed.' });
+  }
+
+  try {
+    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+    const zipPath = path.join(RUNTIMES_DIR, 'java21-download.zip');
+    const java21Url = os.platform() === 'win32'
+      ? 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jdk_x64_windows_hotspot_21.0.4_7.zip'
+      : 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jdk_x64_linux_hotspot_21.0.4_7.tar.gz';
+
+    console.log(`[MMSM] Downloading Java 21 JDK from ${java21Url}...`);
+    await downloadFile(java21Url, zipPath);
+
+    console.log(`[MMSM] Extracting Java 21 JDK into ${targetDir}...`);
+    if (os.platform() === 'win32') {
+      const tempExtract = path.join(RUNTIMES_DIR, 'temp-j21');
+      if (fs.existsSync(tempExtract)) fs.rmSync(tempExtract, { recursive: true, force: true });
+      fs.mkdirSync(tempExtract, { recursive: true });
+
+      const cmd = `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tempExtract}' -Force"`;
+      exec(cmd, (err) => {
+        if (err) {
+          return res.status(500).json({ success: false, error: `Failed to extract Java 21: ${err.message}` });
+        }
+        try {
+          const subdirs = fs.readdirSync(tempExtract);
+          const innerFolder = subdirs.find((d) => fs.statSync(path.join(tempExtract, d)).isDirectory());
+          if (innerFolder) {
+            const innerPath = path.join(tempExtract, innerFolder);
+            fs.cpSync(innerPath, targetDir, { recursive: true });
+          }
+          fs.rmSync(tempExtract, { recursive: true, force: true });
+          fs.unlinkSync(zipPath);
+
+          res.json({ success: true, installed: true, path: javaExe, message: 'Java 21 LTS installed successfully!' });
+        } catch (mErr: any) {
+          res.status(500).json({ success: false, error: mErr.message });
+        }
+      });
+    } else {
+      exec(`tar -xzf "${zipPath}" -C "${targetDir}" --strip-components=1`, (err) => {
+        fs.unlink(zipPath, () => {});
+        if (err) return res.status(500).json({ success: false, error: err.message });
+        res.json({ success: true, installed: true, path: javaExe, message: 'Java 21 LTS installed successfully!' });
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// SERVER PROCESS START / STOP / KILL / COMMAND
+// ----------------------------------------------------
 app.get('/api/servers/running', (req, res) => {
   const running = Object.keys(activeProcesses).map((id) => ({
     serverId: id,
@@ -198,11 +421,11 @@ app.get('/api/servers/running', (req, res) => {
     port: activeProcesses[id].port,
     pid: activeProcesses[id].pid,
     startedAt: activeProcesses[id].startedAt,
+    status: serverStatusMap[id] || 'online',
   }));
-  res.json({ running });
+  res.json({ running, statusMap: serverStatusMap });
 });
 
-// 3. Start Server API
 app.post('/api/servers/:id/start', async (req, res) => {
   const { id } = req.params;
   const {
@@ -218,13 +441,11 @@ app.post('/api/servers/:id/start', async (req, res) => {
   const serverFolder = path.join(SERVERS_DIR, name);
   if (!fs.existsSync(serverFolder)) fs.mkdirSync(serverFolder, { recursive: true });
 
-  // Ensure eula.txt
   const eulaPath = path.join(serverFolder, 'eula.txt');
   if (!fs.existsSync(eulaPath)) {
     fs.writeFileSync(eulaPath, '#Accepted via MMSM\neula=true\n');
   }
 
-  // Ensure server.properties
   const propsPath = path.join(serverFolder, 'server.properties');
   if (!fs.existsSync(propsPath)) {
     const propsContent = `#Minecraft server properties\nserver-port=${port}\nserver-ip=\nmax-players=20\nonline-mode=true\nlevel-name=world\nmotd=${name}\nenable-rcon=false\n`;
@@ -240,17 +461,15 @@ app.post('/api/servers/:id/start', async (req, res) => {
     fs.writeFileSync(propsPath, content);
   }
 
-  // If already running
   if (activeProcesses[id] && !activeProcesses[id].process.killed) {
+    serverStatusMap[id] = 'online';
     return res.json({ success: true, message: 'Server is already running', pid: activeProcesses[id].pid });
   }
 
-  addServerLog(id, 'INFO', 'Launcher', `Initializing process for "${name}" on port ${port}...`);
   addServerLog(id, 'INFO', 'Launcher', `Directory: ${serverFolder}`);
 
   const jarPath = path.join(serverFolder, 'server.jar');
 
-  // Download server JAR if missing
   if (!fs.existsSync(jarPath)) {
     addServerLog(id, 'INFO', 'Downloader', `Server JAR missing. Fetching ${loader.toUpperCase()} ${minecraftVersion} server binary...`);
     try {
@@ -267,7 +486,6 @@ app.post('/api/servers/:id/start', async (req, res) => {
         const jarUrl = `https://meta.fabricmc.net/v2/versions/loader/${minecraftVersion}/0.16.10/1.0.1/server/jar`;
         await downloadFile(jarUrl, jarPath);
       } else {
-        // Fallback / Vanilla
         const manifestRes = await fetch('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json');
         const manifest = await manifestRes.json();
         const target = manifest.versions.find((v: any) => v.id === minecraftVersion);
@@ -286,85 +504,96 @@ app.post('/api/servers/:id/start', async (req, res) => {
     }
   }
 
-  // Check if Java is available
   const bestJava = findBestJavaExecutable(javaPath);
   addServerLog(id, 'INFO', 'Launcher', `Target Java Runtime: ${bestJava.name}`);
 
   const xms = `${minRamMb || 1024}M`;
   const xmx = `${ramMb || 2048}M`;
 
-  addServerLog(id, 'INFO', 'Launcher', `Spawning Java process: ${bestJava.cmd} -Xms${xms} -Xmx${xmx} -jar server.jar nogui`);
+  // Fix quote handling on Windows: Strip outer quotes and run without shell: true to prevent cmd.exe space splitting!
+  const javaExecPath = bestJava.cmd.replace(/^"|"$/g, '');
+  addServerLog(id, 'INFO', 'Launcher', `Spawning Java process: "${javaExecPath}" -Xms${xms} -Xmx${xmx} -jar server.jar nogui`);
 
   try {
-    const javaExec = bestJava.cmd.replace(/^"|"$/g, '');
-    const child = spawn(javaExec, [`-Xms${xms}`, `-Xmx${xmx}`, '-jar', 'server.jar', 'nogui'], {
+    const child = spawn(javaExecPath, [`-Xms${xms}`, `-Xmx${xmx}`, '-jar', 'server.jar', 'nogui'], {
       cwd: serverFolder,
-      shell: true,
+      shell: false,
+      windowsHide: true,
     });
 
     if (!child.pid) {
       addServerLog(id, 'ERROR', 'Launcher', 'Failed to acquire process PID.');
+      serverStatusMap[id] = 'crashed';
       return res.status(500).json({ success: false, error: 'Failed to spawn process' });
     }
 
-      activeProcesses[id] = {
-        process: child,
-        serverId: id,
-        serverName: name,
-        port: Number(port),
-        pid: child.pid,
-        startedAt: new Date().toISOString(),
-      };
+    activeProcesses[id] = {
+      process: child,
+      serverId: id,
+      serverName: name,
+      port: Number(port),
+      pid: child.pid,
+      startedAt: new Date().toISOString(),
+    };
+    serverStatusMap[id] = 'online';
 
-      addServerLog(id, 'INFO', 'Launcher', `Server process running (PID: ${child.pid}). Listening on port ${port}.`);
+    addServerLog(id, 'INFO', 'Launcher', `Server process running (PID: ${child.pid}). Listening on port ${port}.`);
 
-      child.stdout?.on('data', (chunk) => {
-        const text = chunk.toString('utf-8').trim();
-        if (text) {
-          text.split('\n').forEach((line: string) => {
-            addServerLog(id, 'INFO', 'Server thread', line);
-          });
-        }
-      });
+    child.stdout?.on('data', (chunk) => {
+      const text = chunk.toString('utf-8').trim();
+      if (text) {
+        text.split('\n').forEach((line: string) => {
+          addServerLog(id, 'INFO', 'Server thread', line);
+        });
+      }
+    });
 
-      child.stderr?.on('data', (chunk) => {
-        const text = chunk.toString('utf-8').trim();
-        if (text) {
-          text.split('\n').forEach((line: string) => {
-            addServerLog(id, 'WARN', 'Server thread', line);
-          });
-        }
-      });
+    child.stderr?.on('data', (chunk) => {
+      const text = chunk.toString('utf-8').trim();
+      if (text) {
+        text.split('\n').forEach((line: string) => {
+          addServerLog(id, 'WARN', 'Server thread', line);
+        });
+      }
+    });
 
-      child.on('close', (code) => {
-        addServerLog(id, 'INFO', 'System', `Server process stopped with exit code ${code}`);
-        delete activeProcesses[id];
-      });
+    child.on('close', (code) => {
+      delete activeProcesses[id];
+      if (code !== 0 && code !== null) {
+        serverStatusMap[id] = 'crashed';
+        addServerLog(id, 'ERROR', 'System', `[CRASH DETECTED] Server process exited with crash code ${code}`);
+      } else {
+        serverStatusMap[id] = 'offline';
+        addServerLog(id, 'INFO', 'System', `Server process stopped safely with exit code ${code}`);
+      }
+    });
 
-      child.on('error', (procErr) => {
-        addServerLog(id, 'ERROR', 'System', `Process error: ${procErr.message}`);
-        delete activeProcesses[id];
-      });
+    child.on('error', (procErr) => {
+      delete activeProcesses[id];
+      serverStatusMap[id] = 'crashed';
+      addServerLog(id, 'ERROR', 'System', `Process error: ${procErr.message}`);
+    });
 
-      res.json({ success: true, pid: child.pid, port: Number(port) });
-    } catch (spawnErr: any) {
-      addServerLog(id, 'ERROR', 'Launcher', `Spawn exception: ${spawnErr.message}`);
-      res.status(500).json({ success: false, error: spawnErr.message });
-    }
+    res.json({ success: true, pid: child.pid, port: Number(port) });
+  } catch (spawnErr: any) {
+    serverStatusMap[id] = 'crashed';
+    addServerLog(id, 'ERROR', 'Launcher', `Spawn exception: ${spawnErr.message}`);
+    res.status(500).json({ success: false, error: spawnErr.message });
+  }
 });
 
-// 4. Stop Server API
 app.post('/api/servers/:id/stop', (req, res) => {
   const { id } = req.params;
   const proc = activeProcesses[id];
   if (!proc) {
+    serverStatusMap[id] = 'offline';
     return res.json({ success: true, message: 'Server is not running' });
   }
 
+  serverStatusMap[id] = 'stopping';
   addServerLog(id, 'INFO', 'Console', 'Sending graceful stop command to server process...');
   proc.process.stdin?.write('stop\n');
 
-  // Fallback kill timeout after 12s
   setTimeout(() => {
     if (activeProcesses[id]) {
       addServerLog(id, 'WARN', 'Launcher', 'Graceful shutdown timed out. Terminating process...');
@@ -376,13 +605,13 @@ app.post('/api/servers/:id/stop', (req, res) => {
         }
       } catch {}
       delete activeProcesses[id];
+      serverStatusMap[id] = 'offline';
     }
   }, 12000);
 
   res.json({ success: true });
 });
 
-// 5. Kill Server API
 app.post('/api/servers/:id/kill', (req, res) => {
   const { id } = req.params;
   const proc = activeProcesses[id];
@@ -397,10 +626,10 @@ app.post('/api/servers/:id/kill', (req, res) => {
     } catch {}
     delete activeProcesses[id];
   }
+  serverStatusMap[id] = 'offline';
   res.json({ success: true });
 });
 
-// 6. Execute Console Command API
 app.post('/api/servers/:id/command', (req, res) => {
   const { id } = req.params;
   const { command } = req.body;
@@ -419,13 +648,11 @@ app.post('/api/servers/:id/command', (req, res) => {
   }
 });
 
-// 7. Get Server Logs API
 app.get('/api/servers/:id/logs', (req, res) => {
   const { id } = req.params;
-  res.json({ logs: logsBuffer[id] || [] });
+  res.json({ logs: logsBuffer[id] || [], status: serverStatusMap[id] || (activeProcesses[id] ? 'online' : 'offline') });
 });
 
-// 8. Real File Manager API
 app.get('/api/servers/:name/files', (req, res) => {
   const { name } = req.params;
   const subPath = (req.query.path as string) || '';
@@ -479,6 +706,7 @@ async function startServer() {
     console.log(`  MMSM - MrHaydenn's Minecraft Server Manager Wrapper`);
     console.log(`  Running WebGUI on: http://localhost:${PORT}`);
     console.log(`  Servers directory: ${SERVERS_DIR}`);
+    console.log(`  Data directory:    ${DATA_DIR}`);
     console.log(`==================================================`);
   });
 }

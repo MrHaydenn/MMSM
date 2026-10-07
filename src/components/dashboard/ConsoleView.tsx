@@ -140,6 +140,43 @@ export const ConsoleView: React.FC = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] p-4 md:p-6 space-y-4 max-w-[1600px] mx-auto w-full">
+      {/* CRASH DETECTED ALERT BANNER */}
+      {activeServer.status === 'crashed' && (
+        <div className="bg-rose-950/40 border border-rose-500/50 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-rose-200 animate-in fade-in">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-rose-500/20 text-rose-400 mt-0.5">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                Server Crash / Unexpected Process Exit Detected
+              </h3>
+              <p className="text-xs text-rose-300/90 leading-relaxed mt-0.5">
+                The server process exited unexpectedly. If running Fabric 1.20.5+ or Paper, ensure Java 21 LTS is installed on your host.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+            <button
+              onClick={() => {
+                fetch('/api/system/install-java21', { method: 'POST' });
+              }}
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Install Java 21 LTS</span>
+            </button>
+            <button
+              onClick={() => restartServer(activeServer.id)}
+              className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+              <span>Restart Server</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Telemetry & Power Bar */}
       <div className="bg-[#11151c] border border-zinc-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
         {/* Status & Quick Stats */}

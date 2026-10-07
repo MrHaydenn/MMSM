@@ -27,28 +27,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) return parsed;
-      } catch {
-        // fallback
-      }
+      } catch {}
     }
     return DEFAULT_USERS;
   });
+
+  const [hasAccounts, setHasAccounts] = useState<boolean>(true);
 
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     const saved = localStorage.getItem('crafty_current_user');
     if (saved) {
       try {
         return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
+      } catch {}
     }
     return null;
   });
 
+  // Sync users & auth state from backend server disk
+  const syncAuthState = async () => {
+    try {
+      const res = await fetch('/api/auth/state');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.users)) {
+          setUsers(data.users);
+          setHasAccounts(data.users.length > 0);
+          localStorage.setItem('crafty_users', JSON.stringify(data.users));
+
+          // If current user no longer exists in backend users, clear session
+          if (currentUser && !data.users.some((u: any) => u.id === currentUser.id || u.username.toLowerCase() === currentUser.username.toLowerCase())) {
+            setCurrentUser(null);
+            localStorage.removeItem('crafty_current_user');
+          }
+        } else {
+          setHasAccounts(data.hasAccounts);
+        }
+      }
+    } catch {}
+  };
+
   useEffect(() => {
-    localStorage.setItem('crafty_users', JSON.stringify(users));
-  }, [users]);
+    syncAuthState();
+    const interval = setInterval(syncAuthState, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const saveUsersToBackend = async (newUsers: UserAccount[]) => {
+    setUsers(newUsers);
+    setHasAccounts(newUsers.length > 0);
+    localStorage.setItem('crafty_users', JSON.stringify(newUsers));
+    try {
+      await fetch('/api/auth/users/save-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users: newUsers }),
+      });
+    } catch {}
+  };
 
   useEffect(() => {
     if (currentUser) {
@@ -57,8 +93,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('crafty_current_user');
     }
   }, [currentUser]);
-
-  const hasAccounts = users.length > 0;
 
   const createOwnerAccount = (data: { username: string; displayName: string; password?: string }) => {
     const cleanUsername = data.username.trim().toLowerCase();
@@ -82,10 +116,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const newUsers = [ownerUser, ...users];
-    setUsers(newUsers);
     setCurrentUser(ownerUser);
-    localStorage.setItem('crafty_users', JSON.stringify(newUsers));
-    localStorage.setItem('crafty_current_user', JSON.stringify(ownerUser));
+    saveUsersToBackend(newUsers);
+
+    // Call backend API
+    fetch('/api/auth/register-owner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: cleanUsername,
+        displayName: data.displayName.trim() || cleanUsername,
+        password: data.password || '',
+      }),
+    }).catch(() => {});
 
     return { success: true };
   };
@@ -100,7 +143,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const updated = { ...found, lastLogin: new Date().toISOString() };
     setCurrentUser(updated);
-    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    const updatedList = users.map((u) => (u.id === updated.id ? updated : u));
+    saveUsersToBackend(updatedList);
     return { success: true };
   };
 
@@ -124,13 +168,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       lastLogin: 'Never',
       allowedServerIds: data.allowedServerIds || [],
     };
-    setUsers((prev) => [...prev, newUser]);
+    saveUsersToBackend([...users, newUser]);
   };
 
   const updateUserRole = (userId: string, role: UserRole) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, role } : u))
-    );
+    const updatedList = users.map((u) => (u.id === userId ? { ...u, role } : u));
+    saveUsersToBackend(updatedList);
     if (currentUser?.id === userId) {
       setCurrentUser((prev) => (prev ? { ...prev, role } : null));
     }
@@ -139,24 +182,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteUser = (userId: string) => {
     const isDeletingSelf = userId === currentUser?.id;
     const remainingUsers = users.filter((u) => u.id !== userId);
-    setUsers(remainingUsers);
+    saveUsersToBackend(remainingUsers);
     
     if (isDeletingSelf) {
       setCurrentUser(null);
       localStorage.removeItem('crafty_current_user');
     }
-    if (remainingUsers.length === 0) {
-      localStorage.removeItem('crafty_users');
-    } else {
-      localStorage.setItem('crafty_users', JSON.stringify(remainingUsers));
-    }
     return true;
   };
 
   const purgeAllAccounts = () => {
-    setUsers([]);
+    saveUsersToBackend([]);
     setCurrentUser(null);
-    localStorage.removeItem('crafty_users');
     localStorage.removeItem('crafty_current_user');
   };
 

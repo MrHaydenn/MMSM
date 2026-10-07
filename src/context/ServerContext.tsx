@@ -756,10 +756,59 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const activeServer = servers.find((s) => s.id === activeServerId) || servers[0];
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Save servers to local storage
+  // Save servers to local storage and sync with backend
   useEffect(() => {
     localStorage.setItem('crafty_servers', JSON.stringify(servers));
+    fetch('/api/servers-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ servers }),
+    }).catch(() => {});
   }, [servers]);
+
+  // Sync servers and active process status from server host API
+  useEffect(() => {
+    const syncWithBackend = async () => {
+      try {
+        const [srvRes, procRes] = await Promise.all([
+          fetch('/api/servers-data'),
+          fetch('/api/servers/running'),
+        ]);
+
+        let backendServers: MinecraftServer[] | null = null;
+        let statusMap: Record<string, 'online' | 'offline' | 'starting' | 'stopping' | 'crashed'> = {};
+
+        if (srvRes.ok) {
+          const data = await srvRes.json();
+          if (Array.isArray(data.servers)) {
+            backendServers = data.servers;
+          }
+        }
+
+        if (procRes.ok) {
+          const data = await procRes.json();
+          if (data.statusMap) {
+            statusMap = data.statusMap;
+          }
+        }
+
+        setServers((prev) => {
+          const list = backendServers && backendServers.length > 0 ? backendServers : prev;
+          return list.map((s) => {
+            const hostStatus = statusMap[s.id];
+            if (hostStatus) {
+              return { ...s, status: hostStatus };
+            }
+            return s;
+          });
+        });
+      } catch {}
+    };
+
+    syncWithBackend();
+    const interval = setInterval(syncWithBackend, 2500);
+    return () => clearInterval(interval);
+  }, []);
 
   // Save logs to local storage
   useEffect(() => {
@@ -2748,12 +2797,27 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const downloadJavaRuntime = async (runtimeId: string) => {
-    setWrapperSettings((prev) => ({
-      ...prev,
-      javaRuntimes: (prev.javaRuntimes || []).map((r) =>
-        r.id === runtimeId ? { ...r, installed: true } : r
-      ),
-    }));
+    addDownload({
+      title: 'Adoptium Temurin OpenJDK 21 LTS Runtime',
+      filename: 'java21-hotspot-jdk-x64.zip',
+      status: 'downloading',
+      type: 'loader_update',
+      totalSizeBytes: 185000000,
+      speedMbps: 45.2,
+    });
+
+    try {
+      const res = await fetch('/api/system/install-java21', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setWrapperSettings((prev) => ({
+          ...prev,
+          javaRuntimes: (prev.javaRuntimes || []).map((r) =>
+            r.id === runtimeId || r.id === 'java21' || r.id === 'mmsm-java21' ? { ...r, installed: true } : r
+          ),
+        }));
+      }
+    } catch {}
   };
 
   return (

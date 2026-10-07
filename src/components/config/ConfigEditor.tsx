@@ -21,6 +21,7 @@ import {
   Wifi,
   Trash2,
   AlertTriangle,
+  Download,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
@@ -84,9 +85,15 @@ export const ConfigEditor: React.FC = () => {
 
   const [rawText, setRawText] = useState(generateRawProperties());
 
+  const [selectedJavaVer, setSelectedJavaVer] = useState<string>(activeServer.javaVersion || 'auto');
+  const [customJavaPathInput, setCustomJavaPathInput] = useState<string>('');
+  const [isInstallingJava25, setIsInstallingJava25] = useState(false);
+  const [javaNotice, setJavaNotice] = useState<string | null>(null);
+
   const handleSaveVisual = (e: React.FormEvent) => {
     e.preventDefault();
-    updateProperties(activeServer.id, formData);
+    const finalJavaVer = selectedJavaVer === 'custom' ? customJavaPathInput : selectedJavaVer;
+    updateProperties(activeServer.id, formData, { javaVersion: finalJavaVer });
     setServerRam(activeServer.id, minRamMb, maxRamMb);
     toggleSleepMode(activeServer.id, sleepEnabled, sleepTimeout);
     setRawText(generateRawProperties());
@@ -530,7 +537,88 @@ export const ConfigEditor: React.FC = () => {
             </div>
           </div>
 
-          {/* MOTD & Server Appearance */}
+          {/* TARGET JAVA RUNTIME & VERSION SECTION */}
+          <div className="bg-[#11151c] border border-zinc-800 rounded-xl p-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-purple-400" />
+                <h3 className="text-sm font-semibold text-zinc-100">Target Java Runtime & Version Link</h3>
+              </div>
+              <button
+                type="button"
+                disabled={isInstallingJava25}
+                onClick={async () => {
+                  setIsInstallingJava25(true);
+                  setJavaNotice('Downloading & linking Eclipse Temurin JDK 25...');
+                  try {
+                    const res = await fetch('/api/system/install-java25', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.success) {
+                      setSelectedJavaVer('Java 25 (Eclipse Temurin JDK 25)');
+                      setJavaNotice('Eclipse Temurin JDK 25 installed & linked to this server!');
+                    } else {
+                      setJavaNotice(`Install failed: ${data.error}`);
+                    }
+                  } catch {
+                    setJavaNotice('Error connecting to backend Java installer.');
+                  } finally {
+                    setIsInstallingJava25(false);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md shadow-purple-950/40 disabled:opacity-50"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{isInstallingJava25 ? 'Installing...' : '1-Click Install JDK 25'}</span>
+              </button>
+            </div>
+
+            {javaNotice && (
+              <div className="p-3 bg-purple-950/40 border border-purple-800/60 rounded-xl text-xs text-purple-300 font-mono flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>{javaNotice}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="text-zinc-300 font-medium block">Select Installed Java Runtime</label>
+                <select
+                  value={selectedJavaVer}
+                  onChange={(e) => setSelectedJavaVer(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 font-mono focus:outline-none focus:border-purple-500/60"
+                >
+                  <option value="auto">Auto-Detect (Eclipse Temurin JDK 25 for Fabric/MC 1.21+)</option>
+                  <option value="Java 25 (Eclipse Temurin JDK 25)">Eclipse Temurin JDK 25 (Managed ./runtimes/java-25)</option>
+                  <option value="Java 21 (Eclipse Temurin JDK 21)">Eclipse Temurin JDK 21 LTS (Managed ./runtimes/java-21)</option>
+                  <option value="Java 17 (Eclipse Temurin JDK 17)">Eclipse Temurin JDK 17 LTS (Managed ./runtimes/java-17)</option>
+                  <option value="Java 8 (Eclipse Temurin JDK 8)">Eclipse Temurin JDK 8 (Managed ./runtimes/java-8)</option>
+                  <option value="system-default">System Default Java (PATH)</option>
+                  <option value="custom">Custom Binary Path...</option>
+                </select>
+                <p className="text-[11px] text-zinc-400 leading-relaxed mt-1">
+                  {activeServer.loader === 'fabric' || activeServer.minecraftVersion.startsWith('1.21')
+                    ? '⚡ Fabric 0.16.10+ / MC 1.21.4+ automatically uses Eclipse Temurin JDK 25 to prevent Class 69.0 errors.'
+                    : 'Select specific JDK version or let MMSM auto-match based on server core.'}
+                </p>
+              </div>
+
+              {selectedJavaVer === 'custom' && (
+                <div className="space-y-1.5">
+                  <label className="text-zinc-300 font-medium block">Custom java.exe / java Binary Absolute Path</label>
+                  <input
+                    type="text"
+                    value={customJavaPathInput}
+                    onChange={(e) => setCustomJavaPathInput(e.target.value)}
+                    placeholder="C:\Program Files\Java\jdk-25\bin\java.exe"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 font-mono text-xs focus:outline-none focus:border-purple-500/60"
+                  />
+                  <p className="text-[11px] text-zinc-500 font-mono">
+                    Absolute executable path on the host server system.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
           <div className="bg-[#11151c] border border-zinc-800 rounded-xl p-5 space-y-4">
             <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
               <Eye className="w-4 h-4 text-emerald-400" />

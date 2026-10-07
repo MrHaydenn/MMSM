@@ -97,30 +97,33 @@ const ai = new GoogleGenAI({
 
 // Search for Java executables on system
 function findBestJavaExecutable(preferredPath?: string, requestedVersion?: string): { cmd: string; name: string } {
-  // Check standalone runtimes in runtimes/ folder (e.g. java-25, java-21, java-17)
+  // If preferredPath is a direct valid path to java executable
+  if (preferredPath && preferredPath !== 'java' && preferredPath !== 'auto' && fs.existsSync(preferredPath)) {
+    return { cmd: preferredPath, name: `Custom Java (${preferredPath})` };
+  }
+
   const internalJava25 = path.join(RUNTIMES_DIR, 'java-25', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
   const internalJava21 = path.join(RUNTIMES_DIR, 'java-21', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
   const internalJava17 = path.join(RUNTIMES_DIR, 'java-17', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+  const internalJava8  = path.join(RUNTIMES_DIR, 'java-8',  'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
 
-  if ((requestedVersion?.includes('25') || requestedVersion === '69') && fs.existsSync(internalJava25)) {
-    return { cmd: internalJava25, name: 'Managed Java 25 (MMSM Runtime)' };
-  }
-  if ((requestedVersion?.includes('21') || requestedVersion === '65') && fs.existsSync(internalJava21)) {
-    return { cmd: internalJava21, name: 'Managed Java 21 LTS (MMSM Runtime)' };
-  }
-  if (fs.existsSync(internalJava25)) {
-    return { cmd: internalJava25, name: 'Managed Java 25 (MMSM Runtime)' };
-  }
-  if (fs.existsSync(internalJava21)) {
-    return { cmd: internalJava21, name: 'Managed Java 21 LTS (MMSM Runtime)' };
-  }
-  if (fs.existsSync(internalJava17)) {
-    return { cmd: internalJava17, name: 'Managed Java 17 LTS (MMSM Runtime)' };
+  const reqStr = (requestedVersion || preferredPath || '').toLowerCase();
+
+  if (reqStr.includes('25') || reqStr.includes('69')) {
+    if (fs.existsSync(internalJava25)) return { cmd: internalJava25, name: 'Managed Eclipse Temurin Java 25 (MMSM)' };
+  } else if (reqStr.includes('21') || reqStr.includes('65')) {
+    if (fs.existsSync(internalJava21)) return { cmd: internalJava21, name: 'Managed Eclipse Temurin Java 21 LTS (MMSM)' };
+  } else if (reqStr.includes('17') || reqStr.includes('61')) {
+    if (fs.existsSync(internalJava17)) return { cmd: internalJava17, name: 'Managed Eclipse Temurin Java 17 LTS (MMSM)' };
+  } else if (reqStr.includes('8') || reqStr.includes('52')) {
+    if (fs.existsSync(internalJava8)) return { cmd: internalJava8, name: 'Managed Eclipse Temurin Java 8 (MMSM)' };
   }
 
-  if (preferredPath && preferredPath !== 'java' && fs.existsSync(preferredPath)) {
-    return { cmd: preferredPath, name: preferredPath };
-  }
+  // Fallback preference: Java 25 -> Java 21 -> Java 17 -> Java 8
+  if (fs.existsSync(internalJava25)) return { cmd: internalJava25, name: 'Managed Eclipse Temurin Java 25 (MMSM)' };
+  if (fs.existsSync(internalJava21)) return { cmd: internalJava21, name: 'Managed Eclipse Temurin Java 21 LTS (MMSM)' };
+  if (fs.existsSync(internalJava17)) return { cmd: internalJava17, name: 'Managed Eclipse Temurin Java 17 LTS (MMSM)' };
+  if (fs.existsSync(internalJava8))  return { cmd: internalJava8,  name: 'Managed Eclipse Temurin Java 8 (MMSM)' };
 
   if (os.platform() === 'win32') {
     const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
@@ -139,23 +142,20 @@ function findBestJavaExecutable(preferredPath?: string, requestedVersion?: strin
       path.join(localAppData, 'Programs', 'Eclipse Adoptium'),
     ];
 
-    const searchVersions = requestedVersion?.includes('25') ? ['25', '21', '17', '8'] : ['21', '25', '17', '8'];
-
-    for (const targetVer of searchVersions) {
-      for (const base of searchBases) {
-        if (fs.existsSync(base)) {
-          try {
-            const subdirs = fs.readdirSync(base);
-            for (const dir of subdirs) {
-              if (dir.toLowerCase().includes(targetVer)) {
-                const exePath = path.join(base, dir, 'bin', 'java.exe');
-                if (fs.existsSync(exePath)) {
-                  return { cmd: exePath, name: `Java ${targetVer} (${dir})` };
-                }
+    const targetVer = reqStr.includes('25') ? '25' : reqStr.includes('21') ? '21' : reqStr.includes('17') ? '17' : reqStr.includes('8') ? '8' : '25';
+    for (const base of searchBases) {
+      if (fs.existsSync(base)) {
+        try {
+          const subdirs = fs.readdirSync(base);
+          for (const dir of subdirs) {
+            if (dir.toLowerCase().includes(targetVer)) {
+              const exePath = path.join(base, dir, 'bin', 'java.exe');
+              if (fs.existsSync(exePath)) {
+                return { cmd: exePath, name: `Java ${targetVer} (${dir})` };
               }
             }
-          } catch {}
-        }
+          }
+        } catch {}
       }
     }
   }
@@ -176,12 +176,22 @@ function scanInstalledJavaRuntimes() {
   
   const internalJava25 = path.join(RUNTIMES_DIR, 'java-25', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
   if (fs.existsSync(internalJava25)) {
-    list.push({ id: 'mmsm-java25', name: 'Managed Java 25 (Bundled Runtime)', path: internalJava25, isDefault: true });
+    list.push({ id: 'mmsm-java25', name: 'Managed Eclipse Temurin Java 25 (Bundled)', path: internalJava25, isDefault: true });
   }
 
   const internalJava21 = path.join(RUNTIMES_DIR, 'java-21', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
   if (fs.existsSync(internalJava21)) {
-    list.push({ id: 'mmsm-java21', name: 'Managed Java 21 LTS (Bundled Runtime)', path: internalJava21, isDefault: !fs.existsSync(internalJava25) });
+    list.push({ id: 'mmsm-java21', name: 'Managed Eclipse Temurin Java 21 LTS (Bundled)', path: internalJava21, isDefault: !fs.existsSync(internalJava25) });
+  }
+
+  const internalJava17 = path.join(RUNTIMES_DIR, 'java-17', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+  if (fs.existsSync(internalJava17)) {
+    list.push({ id: 'mmsm-java17', name: 'Managed Eclipse Temurin Java 17 LTS (Bundled)', path: internalJava17 });
+  }
+
+  const internalJava8 = path.join(RUNTIMES_DIR, 'java-8', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+  if (fs.existsSync(internalJava8)) {
+    list.push({ id: 'mmsm-java8', name: 'Managed Eclipse Temurin Java 8 (Bundled)', path: internalJava8 });
   }
 
   list.push({ id: 'system-default', name: 'System Default Java (PATH)', path: 'java', isDefault: list.length === 0 });
@@ -425,10 +435,10 @@ Provide a structured answer in Markdown:
 });
 
 // ----------------------------------------------------
-// AUTO-INSTALL JAVA RUNTIMES (21 LTS & 25)
+// AUTO-INSTALL JAVA RUNTIMES (25, 21 LTS, 17 LTS & 8)
 // ----------------------------------------------------
 async function handleInstallJava(version: string) {
-  const targetVer = version === '25' ? '25' : '21';
+  const targetVer = version === '8' ? '8' : version === '17' ? '17' : version === '25' ? '25' : '21';
   const targetDir = path.join(RUNTIMES_DIR, `java-${targetVer}`);
   const javaExe = path.join(targetDir, 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
 
@@ -440,22 +450,39 @@ async function handleInstallJava(version: string) {
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
     const zipPath = path.join(RUNTIMES_DIR, `java${targetVer}-download.zip`);
-    const javaUrl = targetVer === '25'
-      ? (os.platform() === 'win32'
-          ? 'https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25%2B1/OpenJDK25U-jdk_x64_windows_hotspot_25_1.zip'
-          : 'https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25%2B1/OpenJDK25U-jdk_x64_linux_hotspot_25_1.tar.gz')
-      : (os.platform() === 'win32'
-          ? 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jdk_x64_windows_hotspot_21.0.4_7.zip'
-          : 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jdk_x64_linux_hotspot_21.0.4_7.tar.gz');
+    let javaUrl = '';
+    let fallbackUrl = '';
 
-    console.log(`[MMSM] Downloading Java ${targetVer} JDK from ${javaUrl}...`);
+    if (targetVer === '25') {
+      javaUrl = os.platform() === 'win32'
+        ? 'https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25%2B1/OpenJDK25U-jdk_x64_windows_hotspot_25_1.zip'
+        : 'https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25%2B1/OpenJDK25U-jdk_x64_linux_hotspot_25_1.tar.gz';
+      fallbackUrl = 'https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.zip';
+    } else if (targetVer === '21') {
+      javaUrl = os.platform() === 'win32'
+        ? 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip'
+        : 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_linux_hotspot_21.0.5_11.tar.gz';
+      fallbackUrl = 'https://download.oracle.com/java/21/latest/jdk-21_windows-x64_bin.zip';
+    } else if (targetVer === '17') {
+      javaUrl = os.platform() === 'win32'
+        ? 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_windows_hotspot_17.0.13_11.zip'
+        : 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_linux_hotspot_17.0.13_11.tar.gz';
+      fallbackUrl = 'https://download.oracle.com/java/17/latest/jdk-17_windows-x64_bin.zip';
+    } else {
+      javaUrl = os.platform() === 'win32'
+        ? 'https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u432-b06/OpenJDK8U-jdk_x64_windows_hotspot_8u432b06.zip'
+        : 'https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u432-b06/OpenJDK8U-jdk_x64_linux_hotspot_8u432b06.tar.gz';
+    }
+
+    console.log(`[MMSM] Downloading Eclipse Temurin Java ${targetVer} JDK from ${javaUrl}...`);
     try {
       await downloadFile(javaUrl, zipPath);
     } catch (dlErr) {
-      const fallbackUrl = targetVer === '25'
-        ? 'https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.zip'
-        : 'https://download.oracle.com/java/21/latest/jdk-21_windows-x64_bin.zip';
-      await downloadFile(fallbackUrl, zipPath);
+      if (fallbackUrl) {
+        await downloadFile(fallbackUrl, zipPath);
+      } else {
+        throw dlErr;
+      }
     }
 
     console.log(`[MMSM] Extracting Java ${targetVer} JDK into ${targetDir}...`);
@@ -493,7 +520,7 @@ async function handleInstallJava(version: string) {
       });
     }
 
-    return { success: true, installed: true, path: javaExe, version: targetVer, message: `Java ${targetVer} installed successfully in MMSM runtimes!` };
+    return { success: true, installed: true, path: javaExe, version: targetVer, message: `Eclipse Temurin Java ${targetVer} installed successfully in MMSM runtimes!` };
   } catch (err: any) {
     return { success: false, error: err.message || `Failed to install Java ${targetVer}` };
   }
@@ -621,7 +648,19 @@ app.post('/api/servers/:id/start', async (req, res) => {
   }
 
   // Detect if requested version requires Java 25
-  const requestedJavaVer = (loader === 'fabric' && minecraftVersion.startsWith('1.21')) ? '25' : undefined;
+  const needsJava25 = loader === 'fabric' || minecraftVersion.startsWith('1.21') || (javaPath && javaPath.includes('25'));
+  const internalJava25Exe = path.join(RUNTIMES_DIR, 'java-25', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+
+  if (needsJava25 && !fs.existsSync(internalJava25Exe)) {
+    addServerLog(id, 'INFO', 'Launcher', 'Fabric / MC 1.21+ requires Java 25. Auto-downloading Eclipse Temurin JDK 25 into ./runtimes/java-25...');
+    try {
+      await handleInstallJava('25');
+    } catch (jErr: any) {
+      addServerLog(id, 'WARN', 'Launcher', `Auto-install Java 25 notice: ${jErr.message}`);
+    }
+  }
+
+  const requestedJavaVer = needsJava25 ? '25' : undefined;
   const bestJava = findBestJavaExecutable(javaPath, requestedJavaVer);
   addServerLog(id, 'INFO', 'Launcher', `Target Java Runtime: ${bestJava.name}`);
 

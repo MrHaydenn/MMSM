@@ -436,28 +436,42 @@ export const CreateServerWizard: React.FC<CreateServerWizardProps> = ({
                 )}
               </div>
 
-              {/* Java 21 Notice for Fabric / Paper */}
+              {/* Java 25 / 21 Requirement Notice for Fabric / Paper */}
               {(loader === 'fabric' || loader === 'paper' || loader === 'neoforge') && (
-                <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-between text-xs gap-3">
+                <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-800/40 flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs gap-3">
                   <div className="space-y-0.5">
-                    <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Java 21 LTS Requirement</span>
+                    <span className="font-semibold text-purple-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                      <span>{loader === 'fabric' || minecraftVersion.startsWith('1.21') ? 'Eclipse Temurin JDK 25 Linked' : 'Java 21 LTS Requirement'}</span>
                     </span>
-                    <p className="text-zinc-400 text-[11px] leading-relaxed">
-                      {loader.toUpperCase()} on Minecraft {minecraftVersion} requires Java 21. If Java 21 is missing on your host, MMSM auto-configures the managed JDK.
+                    <p className="text-zinc-300 text-[11px] leading-relaxed">
+                      {loader === 'fabric' || minecraftVersion.startsWith('1.21')
+                        ? 'Fabric Loader 0.16.10+ / MC 1.21.4 requires Eclipse Temurin JDK 25 (Class file 69.0). MMSM automatically installs and links JDK 25.'
+                        : `${loader.toUpperCase()} on Minecraft ${minecraftVersion} requires Java 21 LTS. MMSM auto-configures the managed JDK.`}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      fetch('/api/system/install-java21', { method: 'POST' });
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shrink-0 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Download className="w-3 h-3" />
-                    <span>Auto-Install Java 21</span>
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fetch('/api/system/install-java25', { method: 'POST' });
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer shadow-md shadow-purple-950/40"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Install JDK 25</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fetch('/api/system/install-java21', { method: 'POST' });
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3 h-3 text-emerald-400" />
+                      <span>Install JDK 21</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

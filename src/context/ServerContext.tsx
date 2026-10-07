@@ -88,7 +88,11 @@ interface ServerContextType {
   wrapperSettings: import('../types/server').WrapperSettings;
   updateWrapperSettings: (settings: Partial<import('../types/server').WrapperSettings>) => void;
   // Server Config & Lifecycle
-  updateProperties: (serverId: string, props: Partial<ServerProperties>) => void;
+  updateProperties: (
+    serverId: string,
+    props: Partial<ServerProperties>,
+    extraFields?: Partial<MinecraftServer>
+  ) => void;
   createServer: (newServerData: {
     name: string;
     description: string;
@@ -1981,13 +1985,18 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
   };
 
-  const updateProperties = (serverId: string, props: Partial<ServerProperties>) => {
+  const updateProperties = (
+    serverId: string,
+    props: Partial<ServerProperties>,
+    extraFields?: Partial<import('../types/server').MinecraftServer>
+  ) => {
     setServers((prev) =>
       prev.map((s) => {
         if (s.id !== serverId) return s;
         const newPort = props.serverPort ? Number(props.serverPort) : s.port;
         return {
           ...s,
+          ...extraFields,
           port: newPort,
           properties: { ...s.properties, ...props, serverPort: newPort },
           name: props.serverName || s.name,

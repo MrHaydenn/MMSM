@@ -1985,9 +1985,11 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setServers((prev) =>
       prev.map((s) => {
         if (s.id !== serverId) return s;
+        const newPort = props.serverPort ? Number(props.serverPort) : s.port;
         return {
           ...s,
-          properties: { ...s.properties, ...props },
+          port: newPort,
+          properties: { ...s.properties, ...props, serverPort: newPort },
           name: props.serverName || s.name,
         };
       })
@@ -2162,7 +2164,20 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           newFiles = [...s.files, newFile];
         }
 
-        return { ...s, files: newFiles };
+        let updatedPort = s.port;
+        let updatedProps = { ...s.properties };
+        if (path.endsWith('server.properties')) {
+          const match = content.match(/^server-port\s*=\s*(\d+)/m);
+          if (match && match[1]) {
+            const parsedPort = Number(match[1]);
+            if (parsedPort > 0) {
+              updatedPort = parsedPort;
+              updatedProps.serverPort = parsedPort;
+            }
+          }
+        }
+
+        return { ...s, port: updatedPort, properties: updatedProps, files: newFiles };
       })
     );
 
@@ -2805,10 +2820,10 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const downloadJavaRuntime = async (runtimeId: string) => {
+  const downloadJavaRuntime = async (runtimeId: string, version: '21' | '25' = '21') => {
     addDownload({
-      title: 'Adoptium Temurin OpenJDK 21 LTS Runtime',
-      filename: 'java21-hotspot-jdk-x64.zip',
+      title: `Adoptium Temurin OpenJDK ${version} Runtime`,
+      filename: `java${version}-hotspot-jdk-x64.zip`,
       status: 'downloading',
       type: 'loader_update',
       totalSizeBytes: 185000000,
@@ -2816,13 +2831,17 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     try {
-      const res = await fetch('/api/system/install-java21', { method: 'POST' });
+      const res = await fetch('/api/system/install-java', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version }),
+      });
       const data = await res.json();
       if (data.success) {
         setWrapperSettings((prev) => ({
           ...prev,
           javaRuntimes: (prev.javaRuntimes || []).map((r) =>
-            r.id === runtimeId || r.id === 'java21' || r.id === 'mmsm-java21' ? { ...r, installed: true } : r
+            r.id === runtimeId || r.id === `java${version}` || r.id === `mmsm-java${version}` ? { ...r, installed: true } : r
           ),
         }));
       }

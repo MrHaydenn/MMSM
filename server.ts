@@ -74,33 +74,14 @@ function addServerLog(serverId: string, level: string, thread: string, message: 
   }
 }
 
-// Helper to download files
-function downloadFile(url: string, destPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    const request = (url.startsWith('https') ? https : http).get(url, (response) => {
-      if (response.statusCode === 301 || response.statusCode === 302) {
-        const redirectUrl = response.headers.location;
-        if (redirectUrl) {
-          downloadFile(redirectUrl, destPath).then(resolve).catch(reject);
-          return;
-        }
-      }
-      if (response.statusCode !== 200) {
-        reject(new Error(`Failed to download: Status code ${response.statusCode}`));
-        return;
-      }
-      response.pipe(file);
-      file.on('finish', () => {
-        file.close();
-        resolve();
-      });
-    });
-    request.on('error', (err) => {
-      fs.unlink(destPath, () => {});
-      reject(err);
-    });
-  });
+// Helper to download files with automatic redirect handling
+async function downloadFile(url: string, destPath: string): Promise<void> {
+  const res = await fetch(url, { redirect: 'follow' });
+  if (!res.ok) {
+    throw new Error(`Failed to download from ${url}: Status ${res.status} ${res.statusText}`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  fs.writeFileSync(destPath, Buffer.from(arrayBuffer));
 }
 
 import { GoogleGenAI } from '@google/genai';
@@ -121,10 +102,10 @@ function findBestJavaExecutable(preferredPath?: string, requestedVersion?: strin
   const internalJava21 = path.join(RUNTIMES_DIR, 'java-21', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
   const internalJava17 = path.join(RUNTIMES_DIR, 'java-17', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
 
-  if (requestedVersion?.includes('25') && fs.existsSync(internalJava25)) {
+  if ((requestedVersion?.includes('25') || requestedVersion === '69') && fs.existsSync(internalJava25)) {
     return { cmd: internalJava25, name: 'Managed Java 25 (MMSM Runtime)' };
   }
-  if (requestedVersion?.includes('21') && fs.existsSync(internalJava21)) {
+  if ((requestedVersion?.includes('21') || requestedVersion === '65') && fs.existsSync(internalJava21)) {
     return { cmd: internalJava21, name: 'Managed Java 21 LTS (MMSM Runtime)' };
   }
   if (fs.existsSync(internalJava25)) {
@@ -158,7 +139,9 @@ function findBestJavaExecutable(preferredPath?: string, requestedVersion?: strin
       path.join(localAppData, 'Programs', 'Eclipse Adoptium'),
     ];
 
-    for (const targetVer of ['25', '21', '17', '8']) {
+    const searchVersions = requestedVersion?.includes('25') ? ['25', '21', '17', '8'] : ['21', '25', '17', '8'];
+
+    for (const targetVer of searchVersions) {
       for (const base of searchBases) {
         if (fs.existsSync(base)) {
           try {
@@ -191,12 +174,17 @@ function findBestJavaExecutable(preferredPath?: string, requestedVersion?: strin
 function scanInstalledJavaRuntimes() {
   const list: { id: string; name: string; path: string; isDefault?: boolean }[] = [];
   
-  const internalJava21 = path.join(RUNTIMES_DIR, 'java-21', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
-  if (fs.existsSync(internalJava21)) {
-    list.push({ id: 'mmsm-java21', name: 'Managed Java 21 LTS (Bundled Runtime)', path: internalJava21, isDefault: true });
+  const internalJava25 = path.join(RUNTIMES_DIR, 'java-25', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+  if (fs.existsSync(internalJava25)) {
+    list.push({ id: 'mmsm-java25', name: 'Managed Java 25 (Bundled Runtime)', path: internalJava25, isDefault: true });
   }
 
-  list.push({ id: 'system-default', name: 'System Default Java (PATH)', path: 'java', isDefault: !fs.existsSync(internalJava21) });
+  const internalJava21 = path.join(RUNTIMES_DIR, 'java-21', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+  if (fs.existsSync(internalJava21)) {
+    list.push({ id: 'mmsm-java21', name: 'Managed Java 21 LTS (Bundled Runtime)', path: internalJava21, isDefault: !fs.existsSync(internalJava25) });
+  }
+
+  list.push({ id: 'system-default', name: 'System Default Java (PATH)', path: 'java', isDefault: list.length === 0 });
 
   if (os.platform() === 'win32') {
     const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
@@ -359,11 +347,32 @@ app.post('/api/wrapper-settings', (req, res) => {
 
 app.get('/api/servers-data', (req, res) => {
   const servers = readJsonFile<any[]>(SERVERS_FILE, []);
-  // Sync status
-  const updated = servers.map((s) => ({
-    ...s,
-    status: serverStatusMap[s.id] || (activeProcesses[s.id] ? 'online' : 'offline'),
-  }));
+  // Sync status and server-port from server.properties on disk
+  const updated = servers.map((s) => {
+    let port = s.port;
+    let properties = { ...s.properties };
+    const propsPath = path.join(SERVERS_DIR, s.name, 'server.properties');
+    if (fs.existsSync(propsPath)) {
+      try {
+        const text = fs.readFileSync(propsPath, 'utf-8');
+        const match = text.match(/^server-port\s*=\s*(\d+)/m);
+        if (match && match[1]) {
+          const parsedPort = Number(match[1]);
+          if (parsedPort > 0) {
+            port = parsedPort;
+            properties.serverPort = parsedPort;
+          }
+        }
+      } catch {}
+    }
+
+    return {
+      ...s,
+      port,
+      properties,
+      status: serverStatusMap[s.id] || (activeProcesses[s.id] ? 'online' : (s.status === 'crashed' ? 'crashed' : 'offline')),
+    };
+  });
   res.json({ servers: updated });
 });
 
@@ -418,13 +427,13 @@ Provide a structured answer in Markdown:
 // ----------------------------------------------------
 // AUTO-INSTALL JAVA RUNTIMES (21 LTS & 25)
 // ----------------------------------------------------
-app.post('/api/system/install-java', async (req, res) => {
-  const targetVer = req.body?.version === '25' ? '25' : '21';
+async function handleInstallJava(version: string) {
+  const targetVer = version === '25' ? '25' : '21';
   const targetDir = path.join(RUNTIMES_DIR, `java-${targetVer}`);
   const javaExe = path.join(targetDir, 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
 
   if (fs.existsSync(javaExe)) {
-    return res.json({ success: true, installed: true, path: javaExe, version: targetVer, message: `Java ${targetVer} is already installed.` });
+    return { success: true, installed: true, path: javaExe, version: targetVer, message: `Java ${targetVer} is already installed.` };
   }
 
   try {
@@ -443,10 +452,9 @@ app.post('/api/system/install-java', async (req, res) => {
     try {
       await downloadFile(javaUrl, zipPath);
     } catch (dlErr) {
-      // Fallback url if specific build release string shifts
       const fallbackUrl = targetVer === '25'
         ? 'https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.zip'
-        : 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip';
+        : 'https://download.oracle.com/java/21/latest/jdk-21_windows-x64_bin.zip';
       await downloadFile(fallbackUrl, zipPath);
     }
 
@@ -456,41 +464,67 @@ app.post('/api/system/install-java', async (req, res) => {
       if (fs.existsSync(tempExtract)) fs.rmSync(tempExtract, { recursive: true, force: true });
       fs.mkdirSync(tempExtract, { recursive: true });
 
-      const cmd = `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tempExtract}' -Force"`;
-      exec(cmd, (err) => {
-        if (err) {
-          return res.status(500).json({ success: false, error: `Failed to extract Java ${targetVer}: ${err.message}` });
-        }
-        try {
-          const subdirs = fs.readdirSync(tempExtract);
-          const innerFolder = subdirs.find((d) => fs.statSync(path.join(tempExtract, d)).isDirectory());
-          if (innerFolder) {
-            const innerPath = path.join(tempExtract, innerFolder);
-            fs.cpSync(innerPath, targetDir, { recursive: true });
+      await new Promise<void>((resolve, reject) => {
+        const cmd = `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tempExtract}' -Force"`;
+        exec(cmd, (err) => {
+          if (err) return reject(err);
+          try {
+            const subdirs = fs.readdirSync(tempExtract);
+            const innerFolder = subdirs.find((d) => fs.statSync(path.join(tempExtract, d)).isDirectory());
+            if (innerFolder) {
+              const innerPath = path.join(tempExtract, innerFolder);
+              fs.cpSync(innerPath, targetDir, { recursive: true });
+            }
+            fs.rmSync(tempExtract, { recursive: true, force: true });
+            if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+            resolve();
+          } catch (mErr) {
+            reject(mErr);
           }
-          fs.rmSync(tempExtract, { recursive: true, force: true });
-          if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-
-          res.json({ success: true, installed: true, path: javaExe, version: targetVer, message: `Java ${targetVer} installed successfully in MMSM runtimes!` });
-        } catch (mErr: any) {
-          res.status(500).json({ success: false, error: mErr.message });
-        }
+        });
       });
     } else {
-      exec(`tar -xzf "${zipPath}" -C "${targetDir}" --strip-components=1`, (err) => {
-        if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-        if (err) return res.status(500).json({ success: false, error: err.message });
-        res.json({ success: true, installed: true, path: javaExe, version: targetVer, message: `Java ${targetVer} installed successfully!` });
+      await new Promise<void>((resolve, reject) => {
+        exec(`tar -xzf "${zipPath}" -C "${targetDir}" --strip-components=1`, (err) => {
+          if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+          if (err) return reject(err);
+          resolve();
+        });
       });
     }
+
+    return { success: true, installed: true, path: javaExe, version: targetVer, message: `Java ${targetVer} installed successfully in MMSM runtimes!` };
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    return { success: false, error: err.message || `Failed to install Java ${targetVer}` };
+  }
+}
+
+app.post('/api/system/install-java', async (req, res) => {
+  const version = req.body?.version === '25' ? '25' : '21';
+  const result = await handleInstallJava(version);
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json(result);
   }
 });
 
-app.post('/api/system/install-java21', (req, res) => {
-  req.body = { ...req.body, version: '21' };
-  return app._router.handle(req, res, () => {});
+app.post('/api/system/install-java21', async (req, res) => {
+  const result = await handleInstallJava('21');
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json(result);
+  }
+});
+
+app.post('/api/system/install-java25', async (req, res) => {
+  const result = await handleInstallJava('25');
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(500).json(result);
+  }
 });
 
 // ----------------------------------------------------
@@ -512,7 +546,7 @@ app.post('/api/servers/:id/start', async (req, res) => {
   const { id } = req.params;
   const {
     name = 'Minecraft Server',
-    port = 25565,
+    port: bodyPort = 25565,
     minRamMb = 1024,
     ramMb = 2048,
     loader = 'fabric',
@@ -528,24 +562,24 @@ app.post('/api/servers/:id/start', async (req, res) => {
     fs.writeFileSync(eulaPath, '#Accepted via MMSM\neula=true\n');
   }
 
+  let bindPort = Number(bodyPort) || 25565;
   const propsPath = path.join(serverFolder, 'server.properties');
   if (!fs.existsSync(propsPath)) {
-    const propsContent = `#Minecraft server properties\nserver-port=${port}\nserver-ip=\nmax-players=20\nonline-mode=true\nlevel-name=world\nmotd=${name}\nenable-rcon=false\n`;
+    const propsContent = `#Minecraft server properties\nserver-port=${bindPort}\nserver-ip=\nmax-players=20\nonline-mode=true\nlevel-name=world\nmotd=${name}\nenable-rcon=false\n`;
     fs.writeFileSync(propsPath, propsContent);
   } else {
-    let content = fs.readFileSync(propsPath, 'utf-8');
-    if (content.includes('server-port=')) {
-      content = content.replace(/^server-port=.*$/m, `server-port=${port}`);
+    const content = fs.readFileSync(propsPath, 'utf-8');
+    const match = content.match(/^server-port\s*=\s*(\d+)/m);
+    if (match && match[1]) {
+      bindPort = Number(match[1]);
     } else {
-      content += `\nserver-port=${port}`;
+      fs.appendFileSync(propsPath, `\nserver-port=${bindPort}\n`);
     }
-    content = content.replace(/^server-ip=.*$/m, 'server-ip=');
-    fs.writeFileSync(propsPath, content);
   }
 
   if (activeProcesses[id] && !activeProcesses[id].process.killed) {
     serverStatusMap[id] = 'online';
-    return res.json({ success: true, message: 'Server is already running', pid: activeProcesses[id].pid });
+    return res.json({ success: true, message: 'Server is already running', pid: activeProcesses[id].pid, port: bindPort });
   }
 
   addServerLog(id, 'INFO', 'Launcher', `Directory: ${serverFolder}`);
@@ -586,7 +620,9 @@ app.post('/api/servers/:id/start', async (req, res) => {
     }
   }
 
-  const bestJava = findBestJavaExecutable(javaPath);
+  // Detect if requested version requires Java 25
+  const requestedJavaVer = (loader === 'fabric' && minecraftVersion.startsWith('1.21')) ? '25' : undefined;
+  const bestJava = findBestJavaExecutable(javaPath, requestedJavaVer);
   addServerLog(id, 'INFO', 'Launcher', `Target Java Runtime: ${bestJava.name}`);
 
   const xms = `${minRamMb || 1024}M`;
@@ -613,13 +649,13 @@ app.post('/api/servers/:id/start', async (req, res) => {
       process: child,
       serverId: id,
       serverName: name,
-      port: Number(port),
+      port: bindPort,
       pid: child.pid,
       startedAt: new Date().toISOString(),
     };
     serverStatusMap[id] = 'online';
 
-    addServerLog(id, 'INFO', 'Launcher', `Server process running (PID: ${child.pid}). Listening on port ${port}.`);
+    addServerLog(id, 'INFO', 'Launcher', `Server process running (PID: ${child.pid}). Listening on port ${bindPort}.`);
 
     child.stdout?.on('data', (chunk) => {
       const text = chunk.toString('utf-8').trim();
@@ -641,22 +677,36 @@ app.post('/api/servers/:id/start', async (req, res) => {
 
     child.on('close', (code) => {
       delete activeProcesses[id];
-      if (code !== 0 && code !== null) {
-        serverStatusMap[id] = 'crashed';
+      const isCrash = code !== 0 && code !== null;
+      serverStatusMap[id] = isCrash ? 'crashed' : 'offline';
+
+      if (isCrash) {
         addServerLog(id, 'ERROR', 'System', `[CRASH DETECTED] Server process exited with crash code ${code}`);
       } else {
-        serverStatusMap[id] = 'offline';
         addServerLog(id, 'INFO', 'System', `Server process stopped safely with exit code ${code}`);
       }
+
+      // Persist status change to servers.json
+      try {
+        const currentServers = readJsonFile<any[]>(SERVERS_FILE, []);
+        const updatedServers = currentServers.map((s) => (s.id === id ? { ...s, status: serverStatusMap[id] } : s));
+        writeJsonFile(SERVERS_FILE, updatedServers);
+      } catch {}
     });
 
     child.on('error', (procErr) => {
       delete activeProcesses[id];
       serverStatusMap[id] = 'crashed';
       addServerLog(id, 'ERROR', 'System', `Process error: ${procErr.message}`);
+
+      try {
+        const currentServers = readJsonFile<any[]>(SERVERS_FILE, []);
+        const updatedServers = currentServers.map((s) => (s.id === id ? { ...s, status: 'crashed' } : s));
+        writeJsonFile(SERVERS_FILE, updatedServers);
+      } catch {}
     });
 
-    res.json({ success: true, pid: child.pid, port: Number(port) });
+    res.json({ success: true, pid: child.pid, port: bindPort });
   } catch (spawnErr: any) {
     serverStatusMap[id] = 'crashed';
     addServerLog(id, 'ERROR', 'Launcher', `Spawn exception: ${spawnErr.message}`);

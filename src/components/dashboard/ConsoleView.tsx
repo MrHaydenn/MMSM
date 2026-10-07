@@ -43,12 +43,40 @@ export const ConsoleView: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
+  const [isInstallingJava, setIsInstallingJava] = useState<string | null>(null);
+  const [installStatus, setInstallStatus] = useState<string | null>(null);
   const [commandHistory, setCommandHistory] = useState<string[]>([
     '/tps',
     '/list',
     '/save-all',
     '/say Hello from CraftyForge!',
   ]);
+
+  const handleInstallJavaInConsole = async (ver: '21' | '25') => {
+    setIsInstallingJava(ver);
+    setInstallStatus(`Installing Java ${ver}...`);
+    try {
+      const res = await fetch('/api/system/install-java', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: ver }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setInstallStatus(`Java ${ver} installed! Restarting server...`);
+        setTimeout(() => {
+          setInstallStatus(null);
+          restartServer(activeServer.id);
+        }, 1200);
+      } else {
+        setInstallStatus(`Failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch {
+      setInstallStatus('Network error during install');
+    } finally {
+      setIsInstallingJava(null);
+    }
+  };
 
   const consoleEndRef = useRef<HTMLDivElement>(null);
   const logs = serverLogs[activeServer.id] || [];
@@ -147,34 +175,49 @@ export const ConsoleView: React.FC = () => {
       {activeServer.status === 'crashed' && (
         <div className="bg-rose-950/40 border border-rose-500/50 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-rose-200 animate-in fade-in">
           <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-rose-500/20 text-rose-400 mt-0.5">
+            <div className="p-2 rounded-lg bg-rose-500/20 text-rose-400 mt-0.5 shrink-0">
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                Server Crash / Unexpected Process Exit Detected
+                Server Crash / Process Exit Detected
               </h3>
               <p className="text-xs text-rose-300/90 leading-relaxed mt-0.5">
-                The server process exited unexpectedly. If running Fabric 1.20.5+ or Paper, ensure Java 21 LTS is installed on your host.
+                {logs.some((l) => l.message.includes('69.0'))
+                  ? 'Fabric / Minecraft bundler requires Java 25 (class file 69.0). Install Java 25 below to fix!'
+                  : 'Process exited unexpectedly. Ensure the correct Java runtime (Java 21 or Java 25) is installed.'}
               </p>
+              {installStatus && (
+                <p className="text-xs text-emerald-300 font-mono font-bold mt-1.5 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{installStatus}</span>
+                </p>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-2 shrink-0 w-full md:w-auto justify-end">
             <button
               onClick={() => setIsGeminiModalOpen(true)}
-              className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md shadow-purple-950/40"
+              className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md shadow-purple-950/40 transition-all"
             >
               <Sparkles className="w-3.5 h-3.5 text-purple-200" />
               <span>Ask Gemini AI</span>
             </button>
             <button
-              onClick={() => {
-                fetch('/api/system/install-java21', { method: 'POST' });
-              }}
-              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+              onClick={() => handleInstallJavaInConsole('21')}
+              disabled={!!isInstallingJava}
+              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-500/50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Install Java 21</span>
+              <Download className="w-3.5 h-3.5 text-emerald-200" />
+              <span>{isInstallingJava === '21' ? 'Installing 21...' : 'Install Java 21'}</span>
+            </button>
+            <button
+              onClick={() => handleInstallJavaInConsole('25')}
+              disabled={!!isInstallingJava}
+              className="px-3 py-1.5 rounded-lg bg-purple-800 hover:bg-purple-700 text-white border border-purple-500/50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5 text-purple-200" />
+              <span>{isInstallingJava === '25' ? 'Installing 25...' : 'Install Java 25'}</span>
             </button>
             <button
               onClick={() => restartServer(activeServer.id)}

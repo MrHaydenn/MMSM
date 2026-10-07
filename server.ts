@@ -457,49 +457,64 @@ async function handleInstallJava(version: string) {
     return info;
   }
 
-  javaInstallJobs[targetVer] = { status: 'downloading', message: `Downloading Eclipse Temurin Java ${targetVer}...` };
+  javaInstallJobs[targetVer] = { status: 'downloading', message: `Downloading OpenJDK / Eclipse Temurin Java ${targetVer}...` };
 
   try {
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-    const zipPath = path.join(RUNTIMES_DIR, `java${targetVer}-download.zip`);
-    let javaUrl = '';
-    let fallbackUrl = '';
+    const isWin = os.platform() === 'win32';
+    const plat = isWin ? 'windows' : 'linux';
+    const arch = process.arch === 'arm64' ? 'aarch64' : 'x64';
+    const ext = isWin ? 'zip' : 'tar.gz';
+    const zipPath = path.join(RUNTIMES_DIR, `java${targetVer}-download.${ext}`);
 
+    // Adoptium v3 API URLs with robust fallback options
+    let urls: string[] = [];
     if (targetVer === '25') {
-      javaUrl = os.platform() === 'win32'
-        ? 'https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25%2B1/OpenJDK25U-jdk_x64_windows_hotspot_25_1.zip'
-        : 'https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25%2B1/OpenJDK25U-jdk_x64_linux_hotspot_25_1.tar.gz';
-      fallbackUrl = 'https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.zip';
+      urls = [
+        `https://api.adoptium.net/v3/binary/latest/25/ea/${plat}/${arch}/jdk/hotspot/normal/eclipse?project=jdk`,
+        `https://api.adoptium.net/v3/binary/latest/24/ea/${plat}/${arch}/jdk/hotspot/normal/eclipse?project=jdk`,
+        isWin ? 'https://download.oracle.com/java/25/archive/jdk-25-ea+1_windows-x64_bin.zip' : 'https://download.oracle.com/java/25/archive/jdk-25-ea+1_linux-x64_bin.tar.gz',
+      ];
     } else if (targetVer === '21') {
-      javaUrl = os.platform() === 'win32'
-        ? 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip'
-        : 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_linux_hotspot_21.0.5_11.tar.gz';
-      fallbackUrl = 'https://download.oracle.com/java/21/latest/jdk-21_windows-x64_bin.zip';
+      urls = [
+        `https://api.adoptium.net/v3/binary/latest/21/ga/${plat}/${arch}/jdk/hotspot/normal/eclipse?project=jdk`,
+        isWin ? 'https://download.oracle.com/java/21/latest/jdk-21_windows-x64_bin.zip' : 'https://download.oracle.com/java/21/latest/jdk-21_linux-x64_bin.tar.gz',
+      ];
     } else if (targetVer === '17') {
-      javaUrl = os.platform() === 'win32'
-        ? 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_windows_hotspot_17.0.13_11.zip'
-        : 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_linux_hotspot_17.0.13_11.tar.gz';
-      fallbackUrl = 'https://download.oracle.com/java/17/latest/jdk-17_windows-x64_bin.zip';
+      urls = [
+        `https://api.adoptium.net/v3/binary/latest/17/ga/${plat}/${arch}/jdk/hotspot/normal/eclipse?project=jdk`,
+        isWin ? 'https://download.oracle.com/java/17/latest/jdk-17_windows-x64_bin.zip' : 'https://download.oracle.com/java/17/latest/jdk-17_linux-x64_bin.tar.gz',
+      ];
     } else {
-      javaUrl = os.platform() === 'win32'
-        ? 'https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u432-b06/OpenJDK8U-jdk_x64_windows_hotspot_8u432b06.zip'
-        : 'https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u432-b06/OpenJDK8U-jdk_x64_linux_hotspot_8u432b06.tar.gz';
+      urls = [
+        `https://api.adoptium.net/v3/binary/latest/8/ga/${plat}/${arch}/jdk/hotspot/normal/eclipse?project=jdk`,
+      ];
     }
 
-    console.log(`[MMSM] Downloading Eclipse Temurin Java ${targetVer} JDK from ${javaUrl}...`);
-    try {
-      await downloadFile(javaUrl, zipPath);
-    } catch (dlErr) {
-      if (fallbackUrl) {
-        await downloadFile(fallbackUrl, zipPath);
-      } else {
-        throw dlErr;
+    let downloadSuccess = false;
+    let lastError = '';
+    for (const url of urls) {
+      try {
+        console.log(`[MMSM] Attempting download for Java ${targetVer} from ${url}...`);
+        await downloadFile(url, zipPath);
+        if (fs.existsSync(zipPath) && fs.statSync(zipPath).size > 1000000) {
+          downloadSuccess = true;
+          break;
+        }
+      } catch (err: any) {
+        lastError = err.message || String(err);
       }
     }
 
+    if (!downloadSuccess) {
+      throw new Error(`Failed to download Java ${targetVer} archive. ${lastError}`);
+    }
+
     console.log(`[MMSM] Extracting Java ${targetVer} JDK into ${targetDir}...`);
-    if (os.platform() === 'win32') {
+    javaInstallJobs[targetVer] = { status: 'downloading', message: `Extracting Java ${targetVer} JDK binaries into ./runtimes/java-${targetVer}...` };
+
+    if (isWin) {
       const tempExtract = path.join(RUNTIMES_DIR, `temp-j${targetVer}`);
       if (fs.existsSync(tempExtract)) fs.rmSync(tempExtract, { recursive: true, force: true });
       fs.mkdirSync(tempExtract, { recursive: true });
@@ -514,6 +529,8 @@ async function handleInstallJava(version: string) {
             if (innerFolder) {
               const innerPath = path.join(tempExtract, innerFolder);
               fs.cpSync(innerPath, targetDir, { recursive: true });
+            } else {
+              fs.cpSync(tempExtract, targetDir, { recursive: true });
             }
             fs.rmSync(tempExtract, { recursive: true, force: true });
             if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
@@ -540,6 +557,7 @@ async function handleInstallJava(version: string) {
       });
     }
 
+    // Ensure javaExe exists inside targetDir/bin/
     if (!fs.existsSync(javaExe)) {
       const findJava = (dir: string): string | null => {
         try {
@@ -549,7 +567,7 @@ async function handleInstallJava(version: string) {
             if (entry.isDirectory()) {
               const found = findJava(full);
               if (found) return found;
-            } else if (entry.name === (os.platform() === 'win32' ? 'java.exe' : 'java')) {
+            } else if (entry.name === (isWin ? 'java.exe' : 'java')) {
               return full;
             }
           }
@@ -564,6 +582,10 @@ async function handleInstallJava(version: string) {
           fs.cpSync(jdkRoot, targetDir, { recursive: true });
         }
       }
+    }
+
+    if (!fs.existsSync(javaExe)) {
+      throw new Error(`Extraction finished but binary was not found at ${javaExe}`);
     }
 
     const result = { success: true, installed: true, path: javaExe, version: targetVer, message: `Eclipse Temurin Java ${targetVer} installed successfully in MMSM runtimes!` };
@@ -708,9 +730,24 @@ app.post('/api/servers/:id/start', async (req, res) => {
   if (javaPath && javaPath !== 'auto') {
     addServerLog(id, 'INFO', 'Launcher', `User configured Java Selection: "${javaPath}"`);
     requestedJavaVer = javaPath;
+
+    // Check if configured version is missing from ./runtimes/ and auto-install it
+    const reqStr = javaPath.toLowerCase();
+    const targetVer = reqStr.includes('25') ? '25' : reqStr.includes('21') ? '21' : reqStr.includes('17') ? '17' : reqStr.includes('8') ? '8' : '';
+    if (targetVer) {
+      const targetExe = path.join(RUNTIMES_DIR, `java-${targetVer}`, 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+      if (!fs.existsSync(targetExe)) {
+        addServerLog(id, 'INFO', 'Launcher', `Configured Java ${targetVer} missing from runtimes. Auto-downloading OpenJDK ${targetVer}...`);
+        try {
+          await handleInstallJava(targetVer);
+        } catch (jErr: any) {
+          addServerLog(id, 'WARN', 'Launcher', `Auto-install Java ${targetVer} notice: ${jErr.message}`);
+        }
+      }
+    }
   } else {
     // Auto mode for Fabric / MC 1.21+
-    if (loader === 'fabric' || minecraftVersion.startsWith('1.21')) {
+    if (loader === 'fabric' || minecraftVersion.startsWith('1.21') || minecraftVersion.startsWith('26.')) {
       requestedJavaVer = '25';
       const internalJava25Exe = path.join(RUNTIMES_DIR, 'java-25', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
       if (!fs.existsSync(internalJava25Exe)) {

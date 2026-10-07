@@ -1,0 +1,12 @@
+{
+  "project": "Fabric API",
+  "minecraft": "1.21.1",
+  "version": "0.116.17+1.21.1",
+  "id": "Mys3P7lK",
+  "search_versions_type": "str",
+  "compatible_versions": 36,
+  "artifact_bytes": 2452735,
+  "checksum_verified": true,
+  "installed": true,
+  "minecraft_booted": false
+}

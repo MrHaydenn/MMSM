@@ -1,0 +1,24 @@
+{
+  "checked": "2026-10-07",
+  "query": "fabric api",
+  "minecraft": "1.21.1",
+  "loader": "fabric",
+  "index": "downloads",
+  "hits": [
+    {
+      "project_id": "P7dR8mSH",
+      "title": "Fabric API",
+      "downloads": 269978217
+    },
+    {
+      "project_id": "Orvt0mRa",
+      "title": "Indium",
+      "downloads": 44825234
+    },
+    {
+      "project_id": "i6fiqm5y",
+      "title": "Platform",
+      "downloads": 9155649
+    }
+  ]
+}

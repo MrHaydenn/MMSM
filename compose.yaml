@@ -1,0 +1,20 @@
+# Linux only: host networking lets each server's chosen public TCP port work.
+services:
+  mmsm:
+    build: .
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 5m
+    environment:
+      MMSM_HOST: 127.0.0.1
+      MMSM_DATA: /app/data
+    volumes:
+      - mmsm-data:/app/data
+      - mmsm-servers:/app/Servers
+      - mmsm-backups:/app/Backups
+      - mmsm-dependencies:/app/dependencies
+volumes:
+  mmsm-data:
+  mmsm-servers:
+  mmsm-backups:
+  mmsm-dependencies:

@@ -1,0 +1,10 @@
+data
+.git
+__pycache__
+**/__pycache__
+tests
+docs
+
+Servers/
+Backups/
+dependencies/

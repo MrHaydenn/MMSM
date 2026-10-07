@@ -1,0 +1,352 @@
+test_login_rate_limit (test_manager.HTTPTests.test_login_rate_limit) ... HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+ok
+test_operator_cannot_install_or_modify_files (test_manager.HTTPTests.test_operator_cannot_install_or_modify_files) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/servers/testserver/mods-install
+HTTP 127.0.0.1 PUT /api/servers/testserver/files
+HTTP 127.0.0.1 GET /api/servers/testserver/files
+ok
+test_settings_persist_and_static_security_headers (test_manager.HTTPTests.test_settings_persist_and_static_security_headers) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 GET /
+HTTP 127.0.0.1 GET /../../etc/passwd
+ok
+test_setup_auth_csrf_roles_and_session_revocation (test_manager.HTTPTests.test_setup_auth_csrf_roles_and_session_revocation) ... HTTP 127.0.0.1 GET /api/setup
+HTTP 127.0.0.1 GET /api/dashboard
+HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/setup
+HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 GET /api/dashboard
+HTTP 127.0.0.1 GET /api/dashboard
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/dashboard
+HTTP 127.0.0.1 GET /api/users
+HTTP 127.0.0.1 POST /api/servers
+HTTP 127.0.0.1 DELETE /api/users/41a6262740677b2677b15b97
+HTTP 127.0.0.1 GET /api/dashboard
+ok
+test_failed_installer_log_is_preserved (test_manager.JavaProviderTests.test_failed_installer_log_is_preserved) ... ok
+test_forge_installer_uses_argument_file (test_manager.JavaProviderTests.test_forge_installer_uses_argument_file) ... ok
+test_minecraft_metadata_drives_java_major (test_manager.JavaProviderTests.test_minecraft_metadata_drives_java_major) ... ok
+test_archive_blocks_activity_and_excludes_totals (test_manager.LifecycleTests.test_archive_blocks_activity_and_excludes_totals) ... ok
+test_archive_excluded_from_historical_totals (test_manager.LifecycleTests.test_archive_excluded_from_historical_totals) ... ok
+test_catalog_provider_contracts (test_manager.LifecycleTests.test_catalog_provider_contracts) ... ok
+test_download_checksum_and_interrupted_history (test_manager.LifecycleTests.test_download_checksum_and_interrupted_history) ... ok
+test_failed_status_does_not_sleep (test_manager.LifecycleTests.test_failed_status_does_not_sleep) ... ok
+test_mod_enable_disable_and_update_notifications_dedupe (test_manager.LifecycleTests.test_mod_enable_disable_and_update_notifications_dedupe) ... ok
+test_properties_round_trip_and_network_protection (test_manager.LifecycleTests.test_properties_round_trip_and_network_protection) ... ok
+test_proxy_forwards_real_tcp_and_counts_traffic (test_manager.LifecycleTests.test_proxy_forwards_real_tcp_and_counts_traffic) ... ok
+test_sleep_wakes_once_on_status_ping (test_manager.LifecycleTests.test_sleep_wakes_once_on_status_ping) ... ok
+test_update_keeps_world_and_backup_and_failure_preserves_old (test_manager.LifecycleTests.test_update_keeps_world_and_backup_and_failure_preserves_old) ... ok
+test_java_start_console_status_idle_sleep_and_wake (test_manager.RealJVMTests.test_java_start_console_status_idle_sleep_and_wake) ... ok
+test_archive_path_traversal_and_symlink_rejected (test_manager.SecurityTests.test_archive_path_traversal_and_symlink_rejected) ... ok
+test_download_ssrf_rejected (test_manager.SecurityTests.test_download_ssrf_rejected) ... ok
+test_owner_setup_is_atomic (test_manager.SecurityTests.test_owner_setup_is_atomic) ... ok
+test_passwords_sessions_and_expiry (test_manager.SecurityTests.test_passwords_sessions_and_expiry) ... ok
+test_traversal_and_symlink_rejected (test_manager.SecurityTests.test_traversal_and_symlink_rejected) ... ok
+test_dependencies_install_and_reenable_disabled_dependency (test_modrinth.ModrinthTests.test_dependencies_install_and_reenable_disabled_dependency) ... ok
+test_incompatible_or_client_only_mod_rejected_without_mutation (test_modrinth.ModrinthTests.test_incompatible_or_client_only_mod_rejected_without_mutation) ... ok
+test_mod_download_failure_leaves_originals_untouched (test_modrinth.ModrinthTests.test_mod_download_failure_leaves_originals_untouched) ... ok
+test_mrpack_server_files_overrides_and_tracking (test_modrinth.ModrinthTests.test_mrpack_server_files_overrides_and_tracking) ... ok
+test_mrpack_unsafe_path_rolls_back (test_modrinth.ModrinthTests.test_mrpack_unsafe_path_rolls_back) ... ok
+test_paper_accepts_spigot_plugin_and_installs_into_plugins (test_modrinth.ModrinthTests.test_paper_accepts_spigot_plugin_and_installs_into_plugins) ... ok
+test_paper_plugin_search_and_version_filters (test_modrinth.ModrinthTests.test_paper_plugin_search_and_version_filters) ... ok
+test_kill_interrupts_stuck_graceful_stop (test_v02.ExplicitJVMControlTests.test_kill_interrupts_stuck_graceful_stop) ... ok
+test_sleep_now_saves_without_waiting_for_idle_timer (test_v02.ExplicitJVMControlTests.test_sleep_now_saves_without_waiting_for_idle_timer) ... ok
+test_binary_upload_and_backed_up_delete (test_v02.FileTests.test_binary_upload_and_backed_up_delete) ... ok
+test_delete_removes_tracking_and_refuses_folders_or_symlinks (test_v02.FileTests.test_delete_removes_tracking_and_refuses_folders_or_symlinks) ... ok
+test_file_changes_blocked_while_running_or_archived (test_v02.FileTests.test_file_changes_blocked_while_running_or_archived) ... ok
+test_upload_collision_interrupt_and_managed_paths (test_v02.FileTests.test_upload_collision_interrupt_and_managed_paths) ... ok
+test_existing_mods_get_icons_without_reinstallation (test_v02.IconUpgradeTests.test_existing_mods_get_icons_without_reinstallation) ... ok
+test_download_dismissal_persists_per_account_and_keeps_audit_history (test_v02.NewHTTPTests.test_download_dismissal_persists_per_account_and_keeps_audit_history) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/downloads
+HTTP 127.0.0.1 POST /api/downloads/dismiss
+HTTP 127.0.0.1 POST /api/downloads/dismiss
+HTTP 127.0.0.1 GET /api/downloads
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/downloads
+ok
+test_search_pagination_reaches_provider (test_v02.NewHTTPTests.test_search_pagination_reaches_provider) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/modrinth/search
+HTTP 127.0.0.1 GET /api/modrinth/search
+ok
+test_sleep_and_kill_roles_and_sleep_requires_toggle (test_v02.NewHTTPTests.test_sleep_and_kill_roles_and_sleep_requires_toggle) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/servers/testserver/sleep
+HTTP 127.0.0.1 POST /api/servers/testserver/sleep
+HTTP 127.0.0.1 POST /api/servers/testserver/kill
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/servers/testserver/sleep
+HTTP 127.0.0.1 POST /api/servers/testserver/kill
+ok
+test_upload_auth_csrf_and_delete_routes (test_v02.NewHTTPTests.test_upload_auth_csrf_and_delete_routes) ... HTTP 127.0.0.1 POST /api/servers/testserver/upload
+HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/servers/testserver/upload
+HTTP 127.0.0.1 POST /api/servers/testserver/upload
+HTTP 127.0.0.1 DELETE /api/servers/testserver/files
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/servers/testserver/upload
+HTTP 127.0.0.1 DELETE /api/servers/testserver/files
+ok
+test_existing_data_and_port_survive_schema_upgrade (test_v02.UpdateTests.test_existing_data_and_port_survive_schema_upgrade) ... ok
+test_scheduler_checks_due_servers_only_and_failure_backs_off (test_v02.UpdateTests.test_scheduler_checks_due_servers_only_and_failure_backs_off) ... Update check failed for Test world upstream offline
+ok
+test_update_notice_only_targets_current_minecraft_and_loader (test_v02.UpdateTests.test_update_notice_only_targets_current_minecraft_and_loader) ... ok
+test_live_backup_saves_world_and_resumes_then_restart_replaces_process (test_v03.JVMBackupTests.test_live_backup_saves_world_and_resumes_then_restart_replaces_process) ... ok
+test_dependencies_use_project_local_target_and_fail_gracefully (test_v03.PlayerAndImageTests.test_dependencies_use_project_local_target_and_fail_gracefully) ... MMSM: installing missing telemetry/image dependencies into /tmp/tmpav20dk21/dependencies
+MMSM: installing missing telemetry/image dependencies into /tmp/tmpav20dk21/dependencies
+MMSM dependency setup could not finish: Command 'pip' timed out after 180 seconds 
+MMSM will continue. Check internet/pip and restart to retry.
+ok
+test_image_resize_skin_overlay_cache_and_bad_images (test_v03.PlayerAndImageTests.test_image_resize_skin_overlay_cache_and_bad_images) ... ok
+test_player_lists_log_requests_and_offline_actions (test_v03.PlayerAndImageTests.test_player_lists_log_requests_and_offline_actions) ... ok
+test_experimental_filter_uses_release_metadata_and_loader_stability (test_v03.ReleaseTests.test_experimental_filter_uses_release_metadata_and_loader_stability) ... ok
+test_new_minecraft_runtime_notice_is_actionable_and_deduplicated (test_v03.ReleaseTests.test_new_minecraft_runtime_notice_is_actionable_and_deduplicated) ... ok
+test_notification_read_is_per_account_and_unarchive_still_works (test_v03.ScopedHTTPTests.test_notification_read_is_per_account_and_unarchive_still_works) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/notifications/read
+HTTP 127.0.0.1 GET /api/notifications
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/notifications
+HTTP 127.0.0.1 POST /api/servers/testserver/archive
+HTTP 127.0.0.1 GET /api/notifications
+HTTP 127.0.0.1 POST /api/servers/testserver/unarchive
+ok
+test_server_scopes_cover_routes_aggregates_notifications_downloads (test_v03.ScopedHTTPTests.test_server_scopes_cover_routes_aggregates_notifications_downloads) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/servers
+HTTP 127.0.0.1 GET /api/dashboard
+HTTP 127.0.0.1 GET /api/history
+HTTP 127.0.0.1 GET /api/notifications
+HTTP 127.0.0.1 GET /api/downloads
+HTTP 127.0.0.1 GET /api/servers/hidden
+HTTP 127.0.0.1 GET /api/servers/hidden/files
+HTTP 127.0.0.1 GET /api/servers/hidden/logs
+HTTP 127.0.0.1 GET /api/servers/hidden/properties
+HTTP 127.0.0.1 GET /api/servers/hidden/history
+HTTP 127.0.0.1 GET /api/servers/hidden/players
+HTTP 127.0.0.1 GET /api/servers/hidden/backups
+HTTP 127.0.0.1 GET /api/servers/hidden/icon
+HTTP 127.0.0.1 GET /api/servers/hidden/head
+HTTP 127.0.0.1 POST /api/servers/hidden/start
+HTTP 127.0.0.1 POST /api/servers/hidden/restart
+HTTP 127.0.0.1 POST /api/servers/hidden/mods-install
+HTTP 127.0.0.1 POST /api/servers/hidden/upload
+HTTP 127.0.0.1 POST /api/servers/hidden/icon
+HTTP 127.0.0.1 POST /api/servers/hidden/backups
+HTTP 127.0.0.1 POST /api/servers/hidden/players
+HTTP 127.0.0.1 GET /api/modrinth/search
+HTTP 127.0.0.1 GET /api/users
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 GET /api/servers/allowed/players
+ok
+test_settings_eula_theme_request_actions_and_icon (test_v03.ScopedHTTPTests.test_settings_eula_theme_request_actions_and_icon) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 GET /theme.css
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 GET /api/notifications
+HTTP 127.0.0.1 POST /api/notifications/action
+HTTP 127.0.0.1 GET /api/servers/testserver/players
+HTTP 127.0.0.1 GET /api/notifications
+HTTP 127.0.0.1 POST /api/servers/testserver/icon
+HTTP 127.0.0.1 GET /api/servers/testserver
+HTTP 127.0.0.1 POST /api/profile
+HTTP 127.0.0.1 GET /api/me
+HTTP 127.0.0.1 POST /api/assets/logo
+HTTP 127.0.0.1 GET /api/appearance
+ok
+test_backup_path_retention_and_rule_isolation (test_v03.StorageAndBackupTests.test_backup_path_retention_and_rule_isolation) ... ok
+test_eula_global_setting_and_named_creation (test_v03.StorageAndBackupTests.test_eula_global_setting_and_named_creation) ... ok
+test_migration_names_collisions_and_rename_preserve_world (test_v03.StorageAndBackupTests.test_migration_names_collisions_and_rename_preserve_world) ... ok
+test_schedule_intervals_persistence_archive_and_no_duplicate_claim (test_v03.StorageAndBackupTests.test_schedule_intervals_persistence_archive_and_no_duplicate_claim) ... ok
+test_latest_selected_by_publication_and_explicit_version_validated (test_v04.CompatibleVersionTests.test_latest_selected_by_publication_and_explicit_version_validated) ... ok
+test_missing_labels_use_artifact_name_and_bad_ids_raise_actionable_error (test_v04.CompatibleVersionTests.test_missing_labels_use_artifact_name_and_bad_ids_raise_actionable_error) ... ok
+test_compatible_versions_and_one_click_install_routes (test_v04.HTTPChanges.test_compatible_versions_and_one_click_install_routes) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/modrinth/compatible
+HTTP 127.0.0.1 POST /api/servers/testserver/project-install
+ok
+test_delete_scopes_confirmation_and_analytics_history_authorization (test_v04.HTTPChanges.test_delete_scopes_confirmation_and_analytics_history_authorization) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 DELETE /api/servers/testserver
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 DELETE /api/servers/other
+HTTP 127.0.0.1 GET /api/analytics
+HTTP 127.0.0.1 GET /api/analytics
+HTTP 127.0.0.1 GET /api/download-history
+HTTP 127.0.0.1 DELETE /api/servers/testserver
+HTTP 127.0.0.1 GET /api/servers
+ok
+test_navbar_hover_theme_and_three_recent_history (test_v04.HTTPChanges.test_navbar_hover_theme_and_three_recent_history) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 GET /theme.css
+HTTP 127.0.0.1 GET /api/downloads
+HTTP 127.0.0.1 GET /api/download-history
+HTTP 127.0.0.1 GET /api/download-history
+ok
+test_history_limits_count_bytes_age_active_preservation_and_dismissal (test_v04.HistoryTests.test_history_limits_count_bytes_age_active_preservation_and_dismissal) ... ok
+test_history_records_source_destination_and_final_mod_location (test_v04.HistoryTests.test_history_records_source_destination_and_final_mod_location) ... ok
+test_player_hours_and_network_totals_are_bounded_scoped_and_archive_aware (test_v04.HistoryTests.test_player_hours_and_network_totals_are_bounded_scoped_and_archive_aware) ... ok
+test_explicit_stop_then_real_start_rearms_sleep (test_v04.JVMStopChanges.test_explicit_stop_then_real_start_rearms_sleep) ... ok
+test_delete_requires_name_and_idle_and_keeps_unrelated_files_and_backups (test_v04.LifecycleChanges.test_delete_requires_name_and_idle_and_keeps_unrelated_files_and_backups) ... ok
+test_failed_delete_transaction_restores_world_and_journal_recovery (test_v04.LifecycleChanges.test_failed_delete_transaction_restores_world_and_journal_recovery) ... ok
+test_locked_deleted_files_do_not_prevent_manager_startup (test_v04.LifecycleChanges.test_locked_deleted_files_do_not_prevent_manager_startup) ... Server deletion cleanup will retry on next start: File locked
+ok
+test_stop_disarms_ping_across_restart_and_sleep_now_rearms (test_v04.LifecycleChanges.test_stop_disarms_ping_across_restart_and_sleep_now_rearms) ... ok
+test_autostart_selects_only_enabled_installed_active_servers (test_v05.Changes.test_autostart_selects_only_enabled_installed_active_servers) ... ok
+test_folder_delete_recovers_contents_removes_tracking_and_blocks_protected_paths (test_v05.Changes.test_folder_delete_recovers_contents_removes_tracking_and_blocks_protected_paths) ... ok
+test_manual_stop_cancels_queued_autostart_and_scheduled_restart (test_v05.Changes.test_manual_stop_cancels_queued_autostart_and_scheduled_restart) ... ok
+test_missing_java_is_crash_with_persistent_report_and_no_ping_wake (test_v05.Changes.test_missing_java_is_crash_with_persistent_report_and_no_ping_wake) ... ok
+test_modrinth_sort_and_plugin_facets (test_v05.Changes.test_modrinth_sort_and_plugin_facets) ... ok
+test_queued_idle_sleep_cannot_override_stop_even_after_start_intent (test_v05.Changes.test_queued_idle_sleep_cannot_override_stop_even_after_start_intent) ... ok
+test_stop_cancels_queued_restart (test_v05.Changes.test_stop_cancels_queued_restart) ... ok
+test_removed_preferences_and_crash_reports_require_operator (test_v05.HTTPChanges.test_removed_preferences_and_crash_reports_require_operator) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 PUT /api/preferences
+HTTP 127.0.0.1 GET /api/appearance
+HTTP 127.0.0.1 PUT /api/preferences
+HTTP 127.0.0.1 GET /api/servers/testserver/error-report
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/appearance
+HTTP 127.0.0.1 GET /api/servers/testserver/error-report
+ok
+test_actual_sample_queued_sleep_is_cancelled_by_manual_stop (test_v05.JVMChanges.test_actual_sample_queued_sleep_is_cancelled_by_manual_stop) ... ok
+test_jvm_crash_during_startup_captures_exit_code_and_output (test_v05.JVMChanges.test_jvm_crash_during_startup_captures_exit_code_and_output) ... ok
+test_stop_during_backup_cancels_automatic_resume (test_v05.JVMChanges.test_stop_during_backup_cancels_automatic_resume) ... ok
+test_unexpected_exit_is_crashed_but_stop_is_not (test_v05.JVMChanges.test_unexpected_exit_is_crashed_but_stop_is_not) ... ok
+test_settings_and_update_permissions (test_v06.HTTPChanges.test_settings_and_update_permissions) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 GET /theme.css
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 POST /api/wrapper-update/check
+HTTP 127.0.0.1 POST /api/wrapper-update/install
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/wrapper-update/check
+HTTP 127.0.0.1 POST /api/wrapper-update/install
+ok
+test_vanilla_creation_and_install_routes (test_v06.HTTPChanges.test_vanilla_creation_and_install_routes) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/servers
+HTTP 127.0.0.1 POST /api/servers/30a0a65446fc05cb4625ad8d/mods-install
+HTTP 127.0.0.1 POST /api/servers/30a0a65446fc05cb4625ad8d/project-install
+ok
+test_normal_entrypoint_updates_reexecutes_and_preserves_account (test_v06.RestartIntegration.test_normal_entrypoint_updates_reexecutes_and_preserves_account) ... ok
+test_apply_preserves_worlds_data_and_keeps_program_backup (test_v06.Updates.test_apply_preserves_worlds_data_and_keeps_program_backup) ... ok
+test_checks_and_notifications_and_interval (test_v06.Updates.test_checks_and_notifications_and_interval) ... ok
+test_complete_theme_palettes (test_v06.Updates.test_complete_theme_palettes) ... ok
+test_current_failure_and_unconfigured (test_v06.Updates.test_current_failure_and_unconfigured) ... ok
+test_install_busy_gate_and_preparation (test_v06.Updates.test_install_busy_gate_and_preparation) ... ok
+test_interrupted_transaction_recovery (test_v06.Updates.test_interrupted_transaction_recovery) ... ok
+test_reject_checksum_paths_incomplete_version_mismatch (test_v06.Updates.test_reject_checksum_paths_incomplete_version_mismatch) ... ok
+test_reject_private_hosts (test_v06.Updates.test_reject_private_hosts) ... ok
+test_replace_failure_rolls_back (test_v06.Updates.test_replace_failure_rolls_back) ... ok
+test_invalid_collision_running_archive_and_vanilla (test_v07.LocalMods.test_invalid_collision_running_archive_and_vanilla) ... ok
+test_local_upload_toggle_and_no_modrinth_calls (test_v07.LocalMods.test_local_upload_toggle_and_no_modrinth_calls) ... ok
+test_paper_uses_plugins_and_failed_database_changes_restore_files (test_v07.LocalMods.test_paper_uses_plugins_and_failed_database_changes_restore_files) ... ok
+test_required_dependencies_backfill_using_current_installed_version (test_v07.LocalMods.test_required_dependencies_backfill_using_current_installed_version) ... ok
+test_mod_upload_http_roles_csrf_and_tracking (test_v07.UploadHTTP.test_mod_upload_http_roles_csrf_and_tracking) ... HTTP 127.0.0.1 POST /api/servers/testserver/mods-upload
+HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/servers/testserver/mods-upload
+HTTP 127.0.0.1 POST /api/servers/testserver/mods-upload
+HTTP 127.0.0.1 POST /api/users
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/servers/testserver/mods-upload
+ok
+test_defaults_accept_public_ip_but_preserve_origin_and_hostname_checks (test_v071.NetworkSettings.test_defaults_accept_public_ip_but_preserve_origin_and_hostname_checks) ... HTTP 127.0.0.1 GET /
+HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/dashboard
+HTTP 127.0.0.1 GET /api/dashboard
+HTTP 127.0.0.1 GET /
+HTTP 127.0.0.1 GET /
+ok
+test_invalid_network_settings_rejected (test_v071.NetworkSettings.test_invalid_network_settings_rejected) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 PUT /api/settings
+ok
+test_saved_origin_startup_overrides_and_secure_proxy_login (test_v071.NetworkSettings.test_saved_origin_startup_overrides_and_secure_proxy_login) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 PUT /api/settings
+HTTP 127.0.0.1 GET /
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /
+ok
+test_cookie_selection_skips_stale_legacy_cookie (test_v072.Accounts.test_cookie_selection_skips_stale_legacy_cookie) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/me
+HTTP 127.0.0.1 POST /api/logout
+ok
+test_http_ip_accounts_with_https_public_url_configured (test_v072.Accounts.test_http_ip_accounts_with_https_public_url_configured) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/me
+HTTP 127.0.0.1 POST /api/password
+HTTP 127.0.0.1 GET /api/me
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/logout
+HTTP 127.0.0.1 GET /api/me
+ok
+test_local_login_and_https_logout_do_not_conflict (test_v072.Accounts.test_local_login_and_https_logout_do_not_conflict) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/logout
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/logout
+HTTP 127.0.0.1 GET /api/me
+ok
+test_origins_and_csrf_are_still_enforced (test_v072.Accounts.test_origins_and_csrf_are_still_enforced) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 POST /api/logout
+HTTP 127.0.0.1 POST /api/logout
+HTTP 127.0.0.1 POST /api/logout
+HTTP 127.0.0.1 POST /api/logout
+HTTP 127.0.0.1 POST /api/login
+ok
+test_custom_port_is_preserved (test_v072.DefaultPort.test_custom_port_is_preserved) ... ok
+test_default_and_one_time_migration_preserve_later_choices (test_v072.DefaultPort.test_default_and_one_time_migration_preserve_later_choices) ... ok
+
+----------------------------------------------------------------------
+Ran 108 tests in 28.654s
+
+OK

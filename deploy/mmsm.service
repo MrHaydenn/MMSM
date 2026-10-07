@@ -1,0 +1,24 @@
+[Unit]
+Description=MrHaydenn's Minecraft Server Manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mmsm
+Group=mmsm
+WorkingDirectory=/opt/mmsm
+ExecStart=/usr/bin/python3 -m mmsm --data /opt/mmsm/data --host 127.0.0.1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=180
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/mmsm
+
+[Install]
+WantedBy=multi-user.target

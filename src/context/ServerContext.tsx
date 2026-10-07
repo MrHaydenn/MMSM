@@ -1991,19 +1991,19 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     props: Partial<ServerProperties>,
     extraFields?: Partial<import('../types/server').MinecraftServer>
   ) => {
-    setServers((prev) =>
-      prev.map((s) => {
-        if (s.id !== serverId) return s;
-        const newPort = props.serverPort ? Number(props.serverPort) : s.port;
-        return {
-          ...s,
-          ...extraFields,
-          port: newPort,
-          properties: { ...s.properties, ...props, serverPort: newPort },
-          name: props.serverName || s.name,
-        };
-      })
-    );
+    const current = serversRef.current;
+    const updated = current.map((s) => {
+      if (s.id !== serverId) return s;
+      const newPort = props.serverPort ? Number(props.serverPort) : s.port;
+      return {
+        ...s,
+        ...extraFields,
+        port: newPort,
+        properties: { ...s.properties, ...props, serverPort: newPort },
+        name: props.serverName || s.name,
+      };
+    });
+    saveServersToBackend(updated);
   };
 
   const createServer = (newServerData: {
@@ -2435,17 +2435,16 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const setServerRam = (serverId: string, minRamMb: number, maxRamMb: number) => {
-    setServers((prev) =>
-      prev.map((s) =>
-        s.id === serverId
-          ? {
-              ...s,
-              minRamMb: Math.max(512, Math.min(minRamMb, maxRamMb)),
-              allocatedRamMb: Math.max(1024, maxRamMb),
-            }
-          : s
-      )
+    const updated = serversRef.current.map((s) =>
+      s.id === serverId
+        ? {
+            ...s,
+            minRamMb: Math.max(512, Math.min(minRamMb, maxRamMb)),
+            allocatedRamMb: Math.max(1024, maxRamMb),
+          }
+        : s
     );
+    saveServersToBackend(updated);
     addLog(serverId, {
       timestamp: getTimestamp(),
       level: 'INFO',
@@ -2512,19 +2511,18 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const srv = servers.find((s) => s.id === serverId);
     if (!srv) return;
 
-    setServers((prev) =>
-      prev.map((s) =>
-        s.id === serverId
-          ? {
-              ...s,
-              loader: newLoader,
-              loaderVersion: newLoaderVersion,
-              minecraftVersion: newMcVersion || s.minecraftVersion,
-              hasLoaderUpdate: false,
-            }
-          : s
-      )
+    const updated = serversRef.current.map((s) =>
+      s.id === serverId
+        ? {
+            ...s,
+            loader: newLoader,
+            loaderVersion: newLoaderVersion,
+            minecraftVersion: newMcVersion || s.minecraftVersion,
+            hasLoaderUpdate: false,
+          }
+        : s
     );
+    saveServersToBackend(updated);
 
     addLog(serverId, {
       timestamp: getTimestamp(),
@@ -2535,9 +2533,8 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateServerIcon = (serverId: string, iconUrl: string) => {
-    setServers((prev) =>
-      prev.map((s) => (s.id === serverId ? { ...s, serverIconUrl: iconUrl } : s))
-    );
+    const updated = serversRef.current.map((s) => (s.id === serverId ? { ...s, serverIconUrl: iconUrl } : s));
+    saveServersToBackend(updated);
     addLog(serverId, {
       timestamp: getTimestamp(),
       level: 'INFO',
@@ -2547,13 +2544,12 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const toggleSleepMode = (serverId: string, enabled: boolean, inactivityMinutes = 15) => {
-    setServers((prev) =>
-      prev.map((s) =>
-        s.id === serverId
-          ? { ...s, sleepModeEnabled: enabled, sleepInactivityMinutes: inactivityMinutes }
-          : s
-      )
+    const updated = serversRef.current.map((s) =>
+      s.id === serverId
+        ? { ...s, sleepModeEnabled: enabled, sleepInactivityMinutes: inactivityMinutes }
+        : s
     );
+    saveServersToBackend(updated);
     addLog(serverId, {
       timestamp: getTimestamp(),
       level: 'INFO',
@@ -2562,26 +2558,31 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
-  const putServerToSleep = (serverId: string) => {
-    setServers((prev) =>
-      prev.map((s) =>
-        s.id === serverId
-          ? {
-              ...s,
-              status: 'sleeping',
-              isSleeping: true,
-              telemetry: { ...s.telemetry, cpuPercent: 0, ramUsedMb: 0, uptimeSeconds: 0 },
-              players: s.players.map((p) => ({ ...p, online: false })),
-            }
-          : s
-      )
-    );
+  const putServerToSleep = async (serverId: string) => {
     addLog(serverId, {
       timestamp: getTimestamp(),
       level: 'INFO',
       thread: 'HibernationProxy',
-      message: '[Sleep Mode] Zero players active. Server JVM suspended into hibernation. Port listening for next ping/handshake.',
+      message: '[Sleep Mode] Zero players active. Stopping JVM process and engaging Standby Proxy...',
     });
+
+    const updated = serversRef.current.map((s) =>
+      s.id === serverId
+        ? {
+            ...s,
+            status: 'sleeping' as const,
+            isSleeping: true,
+            telemetry: { ...s.telemetry, cpuPercent: 0, ramUsedMb: 0, uptimeSeconds: 0 },
+            players: s.players.map((p) => ({ ...p, online: false })),
+          }
+        : s
+    );
+
+    saveServersToBackend(updated);
+
+    try {
+      await fetch(`/api/servers/${serverId}/sleep`, { method: 'POST' });
+    } catch {}
   };
 
   const wakeServer = async (serverId: string) => {

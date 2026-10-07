@@ -562,13 +562,34 @@ export const ConfigEditor: React.FC = () => {
                 disabled={isInstallingJava25}
                 onClick={async () => {
                   setIsInstallingJava25(true);
-                  setJavaNotice('Downloading & linking Eclipse Temurin JDK 25...');
+                  setJavaNotice('Downloading & linking Eclipse Temurin JDK 25 into ./runtimes/java-25...');
                   try {
                     const res = await fetch('/api/system/install-java25', { method: 'POST' });
                     const data = await res.json();
                     if (data.success) {
-                      setSelectedJavaVer('Java 25 (Eclipse Temurin JDK 25)');
-                      setJavaNotice('Eclipse Temurin JDK 25 installed & linked to this server!');
+                      let isDone = false;
+                      let attempts = 0;
+                      while (!isDone && attempts < 120) {
+                        await new Promise((r) => setTimeout(r, 1000));
+                        attempts++;
+                        try {
+                          const stRes = await fetch('/api/system/install-java/status');
+                          const stData = await stRes.json();
+                          const job = stData.jobs?.['25'];
+                          if (job) {
+                            if (job.status === 'completed') {
+                              setSelectedJavaVer('Java 25 (Eclipse Temurin JDK 25)');
+                              setJavaNotice('Eclipse Temurin JDK 25 installed & linked to this server!');
+                              isDone = true;
+                            } else if (job.status === 'failed') {
+                              setJavaNotice(`Install failed: ${job.error || 'Unknown error'}`);
+                              isDone = true;
+                            } else if (job.message) {
+                              setJavaNotice(job.message);
+                            }
+                          }
+                        } catch {}
+                      }
                     } else {
                       setJavaNotice(`Install failed: ${data.error}`);
                     }

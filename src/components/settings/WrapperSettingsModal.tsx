@@ -93,7 +93,28 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        setJavaStatusNotice(`Eclipse Temurin Java ${ver} installed successfully! Binary path: ${data.path}`);
+        let isDone = false;
+        let attempts = 0;
+        while (!isDone && attempts < 120) {
+          await new Promise((r) => setTimeout(r, 1000));
+          attempts++;
+          try {
+            const stRes = await fetch('/api/system/install-java/status');
+            const stData = await stRes.json();
+            const job = stData.jobs?.[ver];
+            if (job) {
+              if (job.status === 'completed') {
+                setJavaStatusNotice(`Eclipse Temurin Java ${ver} installed successfully! Path: ${job.path || `./runtimes/java-${ver}`}`);
+                isDone = true;
+              } else if (job.status === 'failed') {
+                setJavaStatusNotice(`Failed to install Java ${ver}: ${job.error || 'Unknown error'}`);
+                isDone = true;
+              } else if (job.message) {
+                setJavaStatusNotice(job.message);
+              }
+            }
+          } catch {}
+        }
       } else {
         setJavaStatusNotice(`Failed to install Java ${ver}: ${data.error || 'Unknown error'}`);
       }

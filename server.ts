@@ -56,7 +56,7 @@ interface ServerProcess {
 }
 
 const activeProcesses: Record<string, ServerProcess> = {};
-const serverStatusMap: Record<string, 'online' | 'offline' | 'starting' | 'stopping' | 'crashed'> = {};
+const serverStatusMap: Record<string, 'online' | 'offline' | 'starting' | 'stopping' | 'crashed' | 'sleeping'> = {};
 const logsBuffer: Record<string, { id: string; timestamp: string; level: string; thread: string; message: string }[]> = {};
 
 function addServerLog(serverId: string, level: string, thread: string, message: string) {
@@ -74,14 +74,20 @@ function addServerLog(serverId: string, level: string, thread: string, message: 
   }
 }
 
-// Helper to download files with automatic redirect handling
+// Helper to download files with automatic redirect handling & streaming
 async function downloadFile(url: string, destPath: string): Promise<void> {
   const res = await fetch(url, { redirect: 'follow' });
-  if (!res.ok) {
+  if (!res.ok || !res.body) {
     throw new Error(`Failed to download from ${url}: Status ${res.status} ${res.statusText}`);
   }
-  const arrayBuffer = await res.arrayBuffer();
-  fs.writeFileSync(destPath, Buffer.from(arrayBuffer));
+  const fileStream = fs.createWriteStream(destPath);
+  const reader = res.body.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    fileStream.write(Buffer.from(value));
+  }
+  await new Promise((resolve) => fileStream.end(resolve));
 }
 
 import { GoogleGenAI } from '@google/genai';
@@ -438,14 +444,20 @@ Provide a structured answer in Markdown:
 // ----------------------------------------------------
 // AUTO-INSTALL JAVA RUNTIMES (25, 21 LTS, 17 LTS & 8)
 // ----------------------------------------------------
+const javaInstallJobs: Record<string, { status: 'idle' | 'downloading' | 'completed' | 'failed'; path?: string; message?: string; error?: string }> = {};
+
 async function handleInstallJava(version: string) {
   const targetVer = version === '8' ? '8' : version === '17' ? '17' : version === '25' ? '25' : '21';
   const targetDir = path.join(RUNTIMES_DIR, `java-${targetVer}`);
   const javaExe = path.join(targetDir, 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
 
   if (fs.existsSync(javaExe)) {
-    return { success: true, installed: true, path: javaExe, version: targetVer, message: `Java ${targetVer} is already installed.` };
+    const info = { success: true, installed: true, path: javaExe, version: targetVer, message: `Eclipse Temurin Java ${targetVer} is already installed.` };
+    javaInstallJobs[targetVer] = { status: 'completed', path: javaExe, message: info.message };
+    return info;
   }
+
+  javaInstallJobs[targetVer] = { status: 'downloading', message: `Downloading Eclipse Temurin Java ${targetVer}...` };
 
   try {
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
@@ -512,47 +524,90 @@ async function handleInstallJava(version: string) {
         });
       });
     } else {
-      await new Promise<void>((resolve, reject) => {
-        exec(`tar -xzf "${zipPath}" -C "${targetDir}" --strip-components=1`, (err) => {
+      await new Promise<void>((resolve) => {
+        exec(`tar -xzf "${zipPath}" -C "${targetDir}" --strip-components=1 || unzip -o "${zipPath}" -d "${targetDir}"`, () => {
           if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-          if (err) return reject(err);
+          try {
+            const subdirs = fs.readdirSync(targetDir);
+            if (subdirs.length === 1 && fs.statSync(path.join(targetDir, subdirs[0])).isDirectory()) {
+              const inner = path.join(targetDir, subdirs[0]);
+              fs.cpSync(inner, targetDir, { recursive: true });
+              fs.rmSync(inner, { recursive: true, force: true });
+            }
+          } catch {}
           resolve();
         });
       });
     }
 
-    return { success: true, installed: true, path: javaExe, version: targetVer, message: `Eclipse Temurin Java ${targetVer} installed successfully in MMSM runtimes!` };
+    if (!fs.existsSync(javaExe)) {
+      const findJava = (dir: string): string | null => {
+        try {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              const found = findJava(full);
+              if (found) return found;
+            } else if (entry.name === (os.platform() === 'win32' ? 'java.exe' : 'java')) {
+              return full;
+            }
+          }
+        } catch {}
+        return null;
+      };
+      const foundExe = findJava(targetDir);
+      if (foundExe) {
+        const binDir = path.dirname(foundExe);
+        const jdkRoot = path.dirname(binDir);
+        if (jdkRoot !== targetDir) {
+          fs.cpSync(jdkRoot, targetDir, { recursive: true });
+        }
+      }
+    }
+
+    const result = { success: true, installed: true, path: javaExe, version: targetVer, message: `Eclipse Temurin Java ${targetVer} installed successfully in MMSM runtimes!` };
+    javaInstallJobs[targetVer] = { status: 'completed', path: javaExe, message: result.message };
+    return result;
   } catch (err: any) {
-    return { success: false, error: err.message || `Failed to install Java ${targetVer}` };
+    const failInfo = { success: false, error: err.message || `Failed to install Java ${targetVer}` };
+    javaInstallJobs[targetVer] = { status: 'failed', error: failInfo.error };
+    return failInfo;
   }
 }
 
-app.post('/api/system/install-java', async (req, res) => {
-  const version = req.body?.version === '25' ? '25' : '21';
-  const result = await handleInstallJava(version);
-  if (result.success) {
-    res.json(result);
-  } else {
-    res.status(500).json(result);
+app.post('/api/system/install-java', (req, res) => {
+  const version = (req.body?.version || '21').toString();
+  const targetVer = version === '8' ? '8' : version === '17' ? '17' : version === '25' ? '25' : '21';
+
+  // Trigger background execution if not already running
+  if (!javaInstallJobs[targetVer] || javaInstallJobs[targetVer].status !== 'downloading') {
+    handleInstallJava(targetVer);
   }
+
+  res.setHeader('Content-Type', 'application/json');
+  res.json({ success: true, status: 'started', version: targetVer });
 });
 
-app.post('/api/system/install-java21', async (req, res) => {
-  const result = await handleInstallJava('21');
-  if (result.success) {
-    res.json(result);
-  } else {
-    res.status(500).json(result);
-  }
+app.get('/api/system/install-java/status', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.json({ jobs: javaInstallJobs, runtimes: scanInstalledJavaRuntimes() });
 });
 
-app.post('/api/system/install-java25', async (req, res) => {
-  const result = await handleInstallJava('25');
-  if (result.success) {
-    res.json(result);
-  } else {
-    res.status(500).json(result);
+app.post('/api/system/install-java21', (req, res) => {
+  if (!javaInstallJobs['21'] || javaInstallJobs['21'].status !== 'downloading') {
+    handleInstallJava('21');
   }
+  res.setHeader('Content-Type', 'application/json');
+  res.json({ success: true, status: 'started', version: '21' });
+});
+
+app.post('/api/system/install-java25', (req, res) => {
+  if (!javaInstallJobs['25'] || javaInstallJobs['25'].status !== 'downloading') {
+    handleInstallJava('25');
+  }
+  res.setHeader('Content-Type', 'application/json');
+  res.json({ success: true, status: 'started', version: '25' });
 });
 
 // ----------------------------------------------------
@@ -725,10 +780,14 @@ app.post('/api/servers/:id/start', async (req, res) => {
     child.on('close', (code) => {
       delete activeProcesses[id];
       const isCrash = code !== 0 && code !== null;
-      serverStatusMap[id] = isCrash ? 'crashed' : 'offline';
+      if (serverStatusMap[id] !== 'sleeping') {
+        serverStatusMap[id] = isCrash ? 'crashed' : 'offline';
+      }
 
       if (isCrash) {
         addServerLog(id, 'ERROR', 'System', `[CRASH DETECTED] Server process exited with crash code ${code}`);
+      } else if (serverStatusMap[id] === 'sleeping') {
+        addServerLog(id, 'INFO', 'HibernationProxy', '[Sleep Mode] Server process suspended into hibernation mode. Standby proxy active.');
       } else {
         addServerLog(id, 'INFO', 'System', `Server process stopped safely with exit code ${code}`);
       }
@@ -789,6 +848,43 @@ app.post('/api/servers/:id/stop', (req, res) => {
   }, 12000);
 
   res.json({ success: true });
+});
+
+app.post('/api/servers/:id/sleep', (req, res) => {
+  const { id } = req.params;
+  const proc = activeProcesses[id];
+
+  serverStatusMap[id] = 'sleeping';
+  addServerLog(id, 'INFO', 'HibernationProxy', '[Sleep Mode] Zero players active. Stopping server process and engaging Standby Proxy...');
+
+  if (proc && proc.process) {
+    try {
+      proc.process.stdin?.write('stop\n');
+      setTimeout(() => {
+        if (activeProcesses[id]) {
+          try {
+            if (os.platform() === 'win32') {
+              exec(`taskkill /F /PID ${proc.pid}`);
+            } else {
+              proc.process.kill('SIGKILL');
+            }
+          } catch {}
+          delete activeProcesses[id];
+        }
+      }, 4000);
+    } catch {}
+  } else {
+    delete activeProcesses[id];
+  }
+
+  try {
+    const currentServers = readJsonFile<any[]>(SERVERS_FILE, []);
+    const updatedServers = currentServers.map((s) => (s.id === id ? { ...s, status: 'sleeping' } : s));
+    writeJsonFile(SERVERS_FILE, updatedServers);
+  } catch {}
+
+  res.setHeader('Content-Type', 'application/json');
+  res.json({ success: true, status: 'sleeping' });
 });
 
 app.post('/api/servers/:id/kill', (req, res) => {

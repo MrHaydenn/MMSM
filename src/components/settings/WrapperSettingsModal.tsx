@@ -79,6 +79,30 @@ export const WrapperSettingsModal: React.FC<WrapperSettingsModalProps> = ({
   const [copiedPs1, setCopiedPs1] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateCheckNotice, setUpdateCheckNotice] = useState<string | null>(null);
+  const [isInstallingJava, setIsInstallingJava] = useState<string | null>(null);
+  const [javaStatusNotice, setJavaStatusNotice] = useState<string | null>(null);
+
+  const handleTriggerJavaInstall = async (ver: '21' | '25') => {
+    setIsInstallingJava(ver);
+    setJavaStatusNotice(`Downloading & configuring JDK ${ver} into ./runtimes/java-${ver}...`);
+    try {
+      const res = await fetch('/api/system/install-java', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: ver }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setJavaStatusNotice(`Java ${ver} installed successfully! Path: ${data.path}`);
+      } else {
+        setJavaStatusNotice(`Failed to install Java ${ver}: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      setJavaStatusNotice(`Error installing Java ${ver}: ${err.message}`);
+    } finally {
+      setIsInstallingJava(null);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -671,33 +695,56 @@ Read-Host "MMSM stopped. Press Enter to close"
                     </span>
                   </div>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold">
-                    MC 1.20.5+ / Fabric Ready
+                    MC 1.20.5+ / Java 21 & 25 Ready
                   </span>
                 </div>
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  Minecraft 1.20.5+ and Fabric 1.21+ require Java 21 LTS. If your device lacks Java 21 or has an old Java version, MMSM can automatically download and configure an isolated Adoptium Temurin OpenJDK 21 LTS runtime for your servers.
+                  Minecraft 1.20.5+ requires Java 21 LTS, and newer snapshots or mods (class file version 69.0) require Java 25. MMSM stores isolated OpenJDK runtimes inside <code className="text-zinc-200 bg-zinc-950 px-1 py-0.5 rounded font-mono">./runtimes/</code> so you never have to configure system environment variables manually.
                 </p>
 
-                <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span className="font-semibold text-zinc-200">Managed Java 21 LTS (MMSM Runtime)</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        fetch('/api/system/install-java21', { method: 'POST' });
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow transition-colors"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Auto-Install Java 21 LTS</span>
-                    </button>
+                {javaStatusNotice && (
+                  <div className="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-xl text-xs text-emerald-300 font-mono animate-in fade-in flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{javaStatusNotice}</span>
                   </div>
-                  <p className="text-[11px] text-zinc-400 font-mono">
-                    Target Path: <span className="text-zinc-200">./runtimes/java-21/bin/java</span>
-                  </p>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-200">Managed Java 21 LTS</span>
+                      <button
+                        type="button"
+                        disabled={isInstallingJava === '21'}
+                        onClick={() => handleTriggerJavaInstall('21')}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow transition-colors disabled:opacity-50"
+                      >
+                        {isInstallingJava === '21' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        <span>{isInstallingJava === '21' ? 'Installing...' : 'Install Java 21'}</span>
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-zinc-400 font-mono">
+                      Target Path: <span className="text-zinc-300">./runtimes/java-21/bin/java</span>
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-200">Managed Java 25</span>
+                      <button
+                        type="button"
+                        disabled={isInstallingJava === '25'}
+                        onClick={() => handleTriggerJavaInstall('25')}
+                        className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow transition-colors disabled:opacity-50"
+                      >
+                        {isInstallingJava === '25' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        <span>{isInstallingJava === '25' ? 'Installing...' : 'Install Java 25'}</span>
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-zinc-400 font-mono">
+                      Target Path: <span className="text-zinc-300">./runtimes/java-25/bin/java</span>
+                    </p>
+                  </div>
                 </div>
               </div>
 

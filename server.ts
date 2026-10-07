@@ -103,12 +103,38 @@ function downloadFile(url: string, destPath: string): Promise<void> {
   });
 }
 
+import { GoogleGenAI } from '@google/genai';
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    },
+  },
+});
+
 // Search for Java executables on system
-function findBestJavaExecutable(preferredPath?: string): { cmd: string; name: string } {
-  // Check standalone runtime in runtimes/ folder
+function findBestJavaExecutable(preferredPath?: string, requestedVersion?: string): { cmd: string; name: string } {
+  // Check standalone runtimes in runtimes/ folder (e.g. java-25, java-21, java-17)
+  const internalJava25 = path.join(RUNTIMES_DIR, 'java-25', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
   const internalJava21 = path.join(RUNTIMES_DIR, 'java-21', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+  const internalJava17 = path.join(RUNTIMES_DIR, 'java-17', 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+
+  if (requestedVersion?.includes('25') && fs.existsSync(internalJava25)) {
+    return { cmd: internalJava25, name: 'Managed Java 25 (MMSM Runtime)' };
+  }
+  if (requestedVersion?.includes('21') && fs.existsSync(internalJava21)) {
+    return { cmd: internalJava21, name: 'Managed Java 21 LTS (MMSM Runtime)' };
+  }
+  if (fs.existsSync(internalJava25)) {
+    return { cmd: internalJava25, name: 'Managed Java 25 (MMSM Runtime)' };
+  }
   if (fs.existsSync(internalJava21)) {
     return { cmd: internalJava21, name: 'Managed Java 21 LTS (MMSM Runtime)' };
+  }
+  if (fs.existsSync(internalJava17)) {
+    return { cmd: internalJava17, name: 'Managed Java 17 LTS (MMSM Runtime)' };
   }
 
   if (preferredPath && preferredPath !== 'java' && fs.existsSync(preferredPath)) {
@@ -132,7 +158,7 @@ function findBestJavaExecutable(preferredPath?: string): { cmd: string; name: st
       path.join(localAppData, 'Programs', 'Eclipse Adoptium'),
     ];
 
-    for (const targetVer of ['21', '17']) {
+    for (const targetVer of ['25', '21', '17', '8']) {
       for (const base of searchBases) {
         if (fs.existsSync(base)) {
           try {
@@ -352,37 +378,88 @@ app.post('/api/servers-data', (req, res) => {
 });
 
 // ----------------------------------------------------
-// AUTO-INSTALL JAVA 21 LTS
+// GEMINI AI CRASH ANALYZER
 // ----------------------------------------------------
-app.post('/api/system/install-java21', async (req, res) => {
-  const targetDir = path.join(RUNTIMES_DIR, 'java-21');
+app.post('/api/gemini/analyze-crash', async (req, res) => {
+  const { serverName, loader, minecraftVersion, logs, crashSnippet } = req.body;
+
+  const logsText = crashSnippet || (Array.isArray(logs) ? logs.slice(-30).map((l: any) => l.message).join('\n') : '');
+
+  const prompt = `You are a Minecraft server sysadmin and Java engineer.
+Analyze the following crash log and stack trace to diagnose the exact root cause and give clear, step-by-step fix instructions.
+
+Server Name: ${serverName || 'Minecraft Server'}
+Server Core/Loader: ${loader || 'fabric'}
+Minecraft Version: ${minecraftVersion || '1.21.4'}
+
+Crash Output:
+${logsText || 'No logs provided'}
+
+Provide a structured answer in Markdown:
+1. **Root Cause Analysis** (Identify why the server crashed: e.g. Java Class File Version mismatch like class 69.0 requiring Java 25, class 65.0 requiring Java 21, or missing mod, OOM, corrupted world).
+2. **Required Java Version** (If class file version error: 69.0 = Java 25, 65.0 = Java 21, 61.0 = Java 17, 52.0 = Java 8).
+3. **Step-by-Step Fix Steps** for the user.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+    });
+    res.json({ success: true, analysis: response.text });
+  } catch (err: any) {
+    res.json({
+      success: false,
+      error: err.message || 'Gemini API call failed',
+      fallbackPrompt: prompt,
+    });
+  }
+});
+
+// ----------------------------------------------------
+// AUTO-INSTALL JAVA RUNTIMES (21 LTS & 25)
+// ----------------------------------------------------
+app.post('/api/system/install-java', async (req, res) => {
+  const targetVer = req.body?.version === '25' ? '25' : '21';
+  const targetDir = path.join(RUNTIMES_DIR, `java-${targetVer}`);
   const javaExe = path.join(targetDir, 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
 
   if (fs.existsSync(javaExe)) {
-    return res.json({ success: true, installed: true, path: javaExe, message: 'Java 21 LTS is already installed.' });
+    return res.json({ success: true, installed: true, path: javaExe, version: targetVer, message: `Java ${targetVer} is already installed.` });
   }
 
   try {
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-    const zipPath = path.join(RUNTIMES_DIR, 'java21-download.zip');
-    const java21Url = os.platform() === 'win32'
-      ? 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jdk_x64_windows_hotspot_21.0.4_7.zip'
-      : 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jdk_x64_linux_hotspot_21.0.4_7.tar.gz';
+    const zipPath = path.join(RUNTIMES_DIR, `java${targetVer}-download.zip`);
+    const javaUrl = targetVer === '25'
+      ? (os.platform() === 'win32'
+          ? 'https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25%2B1/OpenJDK25U-jdk_x64_windows_hotspot_25_1.zip'
+          : 'https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25%2B1/OpenJDK25U-jdk_x64_linux_hotspot_25_1.tar.gz')
+      : (os.platform() === 'win32'
+          ? 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jdk_x64_windows_hotspot_21.0.4_7.zip'
+          : 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/OpenJDK21U-jdk_x64_linux_hotspot_21.0.4_7.tar.gz');
 
-    console.log(`[MMSM] Downloading Java 21 JDK from ${java21Url}...`);
-    await downloadFile(java21Url, zipPath);
+    console.log(`[MMSM] Downloading Java ${targetVer} JDK from ${javaUrl}...`);
+    try {
+      await downloadFile(javaUrl, zipPath);
+    } catch (dlErr) {
+      // Fallback url if specific build release string shifts
+      const fallbackUrl = targetVer === '25'
+        ? 'https://download.oracle.com/java/25/latest/jdk-25_windows-x64_bin.zip'
+        : 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.5%2B11/OpenJDK21U-jdk_x64_windows_hotspot_21.0.5_11.zip';
+      await downloadFile(fallbackUrl, zipPath);
+    }
 
-    console.log(`[MMSM] Extracting Java 21 JDK into ${targetDir}...`);
+    console.log(`[MMSM] Extracting Java ${targetVer} JDK into ${targetDir}...`);
     if (os.platform() === 'win32') {
-      const tempExtract = path.join(RUNTIMES_DIR, 'temp-j21');
+      const tempExtract = path.join(RUNTIMES_DIR, `temp-j${targetVer}`);
       if (fs.existsSync(tempExtract)) fs.rmSync(tempExtract, { recursive: true, force: true });
       fs.mkdirSync(tempExtract, { recursive: true });
 
       const cmd = `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tempExtract}' -Force"`;
       exec(cmd, (err) => {
         if (err) {
-          return res.status(500).json({ success: false, error: `Failed to extract Java 21: ${err.message}` });
+          return res.status(500).json({ success: false, error: `Failed to extract Java ${targetVer}: ${err.message}` });
         }
         try {
           const subdirs = fs.readdirSync(tempExtract);
@@ -392,23 +469,28 @@ app.post('/api/system/install-java21', async (req, res) => {
             fs.cpSync(innerPath, targetDir, { recursive: true });
           }
           fs.rmSync(tempExtract, { recursive: true, force: true });
-          fs.unlinkSync(zipPath);
+          if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
 
-          res.json({ success: true, installed: true, path: javaExe, message: 'Java 21 LTS installed successfully!' });
+          res.json({ success: true, installed: true, path: javaExe, version: targetVer, message: `Java ${targetVer} installed successfully in MMSM runtimes!` });
         } catch (mErr: any) {
           res.status(500).json({ success: false, error: mErr.message });
         }
       });
     } else {
       exec(`tar -xzf "${zipPath}" -C "${targetDir}" --strip-components=1`, (err) => {
-        fs.unlink(zipPath, () => {});
+        if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
         if (err) return res.status(500).json({ success: false, error: err.message });
-        res.json({ success: true, installed: true, path: javaExe, message: 'Java 21 LTS installed successfully!' });
+        res.json({ success: true, installed: true, path: javaExe, version: targetVer, message: `Java ${targetVer} installed successfully!` });
       });
     }
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+app.post('/api/system/install-java21', (req, res) => {
+  req.body = { ...req.body, version: '21' };
+  return app._router.handle(req, res, () => {});
 });
 
 // ----------------------------------------------------

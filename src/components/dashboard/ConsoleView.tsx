@@ -16,10 +16,12 @@ import {
   Copy,
   Check,
   Globe,
+  Sparkles,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
 import { ServerLog } from '../../types/server';
+import { GeminiCrashModal } from '../common/GeminiCrashModal';
 
 export const ConsoleView: React.FC = () => {
   const {
@@ -40,6 +42,7 @@ export const ConsoleView: React.FC = () => {
   const [autoScroll, setAutoScroll] = useState(true);
   const [copied, setCopied] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
   const [commandHistory, setCommandHistory] = useState<string[]>([
     '/tps',
     '/list',
@@ -158,13 +161,20 @@ export const ConsoleView: React.FC = () => {
           </div>
           <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
             <button
+              onClick={() => setIsGeminiModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md shadow-purple-950/40"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+              <span>Ask Gemini AI</span>
+            </button>
+            <button
               onClick={() => {
                 fetch('/api/system/install-java21', { method: 'POST' });
               }}
               className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
             >
               <Download className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Install Java 21 LTS</span>
+              <span>Install Java 21</span>
             </button>
             <button
               onClick={() => restartServer(activeServer.id)}
@@ -176,6 +186,13 @@ export const ConsoleView: React.FC = () => {
           </div>
         </div>
       )}
+
+      <GeminiCrashModal
+        isOpen={isGeminiModalOpen}
+        onClose={() => setIsGeminiModalOpen(false)}
+        server={activeServer}
+        logs={logs}
+      />
 
       {/* Top Telemetry & Power Bar */}
       <div className="bg-[#11151c] border border-zinc-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">

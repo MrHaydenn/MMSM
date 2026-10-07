@@ -28,10 +28,12 @@ import {
   X,
   Pencil,
   Trash2,
+  Sparkles,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
 import { MinecraftServer } from '../../types/server';
+import { GeminiCrashModal } from '../common/GeminiCrashModal';
 
 interface MainDashboardProps {
   onSelectServer: (server: MinecraftServer) => void;
@@ -54,12 +56,14 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
     wakeServer,
     wrapperSettings,
     setServerPublicIp,
+    serverLogs,
   } = useServer();
   const { canPerformAction } = useAuth();
 
   const [copiedIpServerId, setCopiedIpServerId] = useState<string | null>(null);
   const [archiveModalServer, setArchiveModalServer] = useState<MinecraftServer | null>(null);
   const [deleteModalServer, setDeleteModalServer] = useState<MinecraftServer | null>(null);
+  const [geminiModalServer, setGeminiModalServer] = useState<MinecraftServer | null>(null);
   const [editingIpServer, setEditingIpServer] = useState<MinecraftServer | null>(null);
   const [customIpInput, setCustomIpInput] = useState('');
   const [customPortInput, setCustomPortInput] = useState('');
@@ -613,6 +617,31 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
                           >
                             <span>💤 Wake Server</span>
                           </button>
+                        ) : srv.status === 'crashed' ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setGeminiModalServer(srv);
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/40 text-xs font-bold transition-colors cursor-pointer"
+                              title="Ask Gemini AI to analyze crash log"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                              <span>Ask Gemini AI</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startServer(srv.id);
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors cursor-pointer"
+                              title="Restart server process"
+                            >
+                              <RotateCw className="w-3.5 h-3.5" />
+                              <span>Restart</span>
+                            </button>
+                          </div>
                         ) : srv.status === 'offline' ? (
                           <button
                             onClick={() => startServer(srv.id)}
@@ -1035,6 +1064,15 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {/* GEMINI CRASH MODAL */}
+      {geminiModalServer && (
+        <GeminiCrashModal
+          isOpen={!!geminiModalServer}
+          onClose={() => setGeminiModalServer(null)}
+          server={geminiModalServer}
+          logs={serverLogs[geminiModalServer.id] || []}
+        />
       )}
     </div>
   );

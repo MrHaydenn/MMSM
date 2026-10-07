@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { UserAccount, UserRole } from '../types/server';
 
 interface AuthContextType {
@@ -32,7 +32,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return DEFAULT_USERS;
   });
 
-  const [hasAccounts, setHasAccounts] = useState<boolean>(true);
+  const [hasAccounts, setHasAccounts] = useState<boolean>(() => {
+    return users.length > 0;
+  });
 
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     const saved = localStorage.getItem('crafty_current_user');
@@ -44,6 +46,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
 
+  const usersRef = useRef(users);
+  usersRef.current = users;
+
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+
   // Sync users & auth state from backend server disk
   const syncAuthState = async () => {
     try {
@@ -51,17 +59,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.users)) {
-          setUsers(data.users);
-          setHasAccounts(data.users.length > 0);
-          localStorage.setItem('crafty_users', JSON.stringify(data.users));
+          // If server host disk is empty but local client has saved accounts, seed server disk
+          if (data.users.length === 0 && usersRef.current.length > 0) {
+            saveUsersToBackend(usersRef.current);
+            return;
+          }
 
-          // If current user no longer exists in backend users, clear session
-          if (currentUser && !data.users.some((u: any) => u.id === currentUser.id || u.username.toLowerCase() === currentUser.username.toLowerCase())) {
+          const currentJson = JSON.stringify(usersRef.current);
+          const newJson = JSON.stringify(data.users);
+
+          if (currentJson !== newJson) {
+            setUsers(data.users);
+            setHasAccounts(data.users.length > 0);
+            localStorage.setItem('crafty_users', newJson);
+          } else {
+            setHasAccounts(data.users.length > 0);
+          }
+
+          // If current user no longer exists in non-empty backend users, clear session
+          const activeUser = currentUserRef.current;
+          if (
+            activeUser &&
+            data.users.length > 0 &&
+            !data.users.some(
+              (u: any) =>
+                u.id === activeUser.id || u.username.toLowerCase() === activeUser.username.toLowerCase()
+            )
+          ) {
             setCurrentUser(null);
             localStorage.removeItem('crafty_current_user');
           }
-        } else {
-          setHasAccounts(data.hasAccounts);
         }
       }
     } catch {}
@@ -69,7 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     syncAuthState();
-    const interval = setInterval(syncAuthState, 4000);
+    const interval = setInterval(syncAuthState, 5000);
     return () => clearInterval(interval);
   }, []);
 

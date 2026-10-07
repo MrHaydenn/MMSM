@@ -756,17 +756,22 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const activeServer = servers.find((s) => s.id === activeServerId) || servers[0];
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Save servers to local storage and sync with backend
-  useEffect(() => {
-    localStorage.setItem('crafty_servers', JSON.stringify(servers));
-    fetch('/api/servers-data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ servers }),
-    }).catch(() => {});
-  }, [servers]);
+  const serversRef = useRef(servers);
+  serversRef.current = servers;
 
-  // Sync servers and active process status from server host API
+  const saveServersToBackend = async (newServers: MinecraftServer[]) => {
+    setServers(newServers);
+    localStorage.setItem('crafty_servers', JSON.stringify(newServers));
+    try {
+      await fetch('/api/servers-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ servers: newServers }),
+      });
+    } catch {}
+  };
+
+  // Sync servers and active process status from server host API without feedback loop
   useEffect(() => {
     const syncWithBackend = async () => {
       try {
@@ -792,21 +797,26 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           }
         }
 
-        setServers((prev) => {
-          const list = backendServers && backendServers.length > 0 ? backendServers : prev;
-          return list.map((s) => {
-            const hostStatus = statusMap[s.id];
-            if (hostStatus) {
-              return { ...s, status: hostStatus };
-            }
-            return s;
-          });
+        const currentServers = serversRef.current;
+        const targetList = backendServers && backendServers.length > 0 ? backendServers : currentServers;
+
+        const updatedList = targetList.map((s) => {
+          const hostStatus = statusMap[s.id];
+          if (hostStatus && hostStatus !== s.status) {
+            return { ...s, status: hostStatus };
+          }
+          return s;
         });
+
+        if (JSON.stringify(updatedList) !== JSON.stringify(currentServers)) {
+          setServers(updatedList);
+          localStorage.setItem('crafty_servers', JSON.stringify(updatedList));
+        }
       } catch {}
     };
 
     syncWithBackend();
-    const interval = setInterval(syncWithBackend, 2500);
+    const interval = setInterval(syncWithBackend, 4000);
     return () => clearInterval(interval);
   }, []);
 
@@ -2073,7 +2083,8 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ),
     };
 
-    setServers((prev) => [...prev, newServer]);
+    const updatedList = [...serversRef.current, newServer];
+    saveServersToBackend(updatedList);
     setActiveServerId(newServer.id);
 
     setServerLogs((prev) => ({
@@ -2093,13 +2104,11 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const deleteServer = (serverId: string) => {
-    setServers((prev) => {
-      const filtered = prev.filter((s) => s.id !== serverId);
-      if (activeServerId === serverId) {
-        setActiveServerId(filtered[0]?.id || '');
-      }
-      return filtered;
-    });
+    const remaining = serversRef.current.filter((s) => s.id !== serverId);
+    if (activeServerId === serverId) {
+      setActiveServerId(remaining[0]?.id || '');
+    }
+    saveServersToBackend(remaining);
 
     setServerLogs((prev) => {
       const next = { ...prev };

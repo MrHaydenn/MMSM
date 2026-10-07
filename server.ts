@@ -74,6 +74,102 @@ function downloadFile(url: string, destPath: string): Promise<void> {
   });
 }
 
+// Helper to scan for installed Java versions on host system
+function findBestJavaExecutable(preferredPath?: string): { cmd: string; name: string } {
+  if (preferredPath && preferredPath !== 'java' && fs.existsSync(preferredPath)) {
+    return { cmd: `"${preferredPath}"`, name: preferredPath };
+  }
+
+  if (os.platform() === 'win32') {
+    const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
+    const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+    const username = os.userInfo() ? os.userInfo().username : '';
+    const localAppData = process.env['LOCALAPPDATA'] || `C:\\Users\\${username}\\AppData\\Local`;
+
+    const searchBases = [
+      path.join(pf, 'Eclipse Adoptium'),
+      path.join(pf, 'Java'),
+      path.join(pf, 'Microsoft'),
+      path.join(pf, 'Amazon Corretto'),
+      path.join(pf, 'Zulu'),
+      path.join(pf, 'BellSoft'),
+      path.join(pf86, 'Java'),
+      path.join(localAppData, 'Programs', 'Eclipse Adoptium'),
+    ];
+
+    // Priority: Java 21 LTS -> Java 17 LTS
+    for (const targetVer of ['21', '17']) {
+      for (const base of searchBases) {
+        if (fs.existsSync(base)) {
+          try {
+            const subdirs = fs.readdirSync(base);
+            for (const dir of subdirs) {
+              if (dir.toLowerCase().includes(targetVer)) {
+                const exePath = path.join(base, dir, 'bin', 'java.exe');
+                if (fs.existsSync(exePath)) {
+                  return { cmd: `"${exePath}"`, name: `Java ${targetVer} (${dir})` };
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+  }
+
+  if (process.env.JAVA_HOME) {
+    const jhExe = path.join(process.env.JAVA_HOME, 'bin', os.platform() === 'win32' ? 'java.exe' : 'java');
+    if (fs.existsSync(jhExe)) {
+      return { cmd: `"${jhExe}"`, name: `JAVA_HOME (${process.env.JAVA_HOME})` };
+    }
+  }
+
+  return { cmd: 'java', name: 'System Default Java' };
+}
+
+// Helper to list all detected Java JDKs on system
+function scanInstalledJavaRuntimes() {
+  const list: { id: string; name: string; path: string; isDefault?: boolean }[] = [];
+  list.push({ id: 'system-default', name: 'System Default Java (PATH)', path: 'java', isDefault: true });
+
+  if (os.platform() === 'win32') {
+    const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
+    const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+    const username = os.userInfo() ? os.userInfo().username : '';
+    const localAppData = process.env['LOCALAPPDATA'] || `C:\\Users\\${username}\\AppData\\Local`;
+
+    const searchBases = [
+      path.join(pf, 'Eclipse Adoptium'),
+      path.join(pf, 'Java'),
+      path.join(pf, 'Microsoft'),
+      path.join(pf, 'Amazon Corretto'),
+      path.join(pf, 'Zulu'),
+      path.join(pf, 'BellSoft'),
+      path.join(pf86, 'Java'),
+      path.join(localAppData, 'Programs', 'Eclipse Adoptium'),
+    ];
+
+    for (const base of searchBases) {
+      if (fs.existsSync(base)) {
+        try {
+          const subdirs = fs.readdirSync(base);
+          for (const dir of subdirs) {
+            const exePath = path.join(base, dir, 'bin', 'java.exe');
+            if (fs.existsSync(exePath)) {
+              list.push({
+                id: `java-${dir.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+                name: `${dir}`,
+                path: exePath,
+              });
+            }
+          }
+        } catch {}
+      }
+    }
+  }
+  return list;
+}
+
 // 1. System Info API
 app.get('/api/system/info', (req, res) => {
   const totalMemGb = Math.round(os.totalmem() / (1024 * 1024 * 1024));
@@ -86,7 +182,12 @@ app.get('/api/system/info', (req, res) => {
     platform: os.platform(),
     serversDirectory: SERVERS_DIR,
     backupsDirectory: BACKUPS_DIR,
+    detectedJavaRuntimes: scanInstalledJavaRuntimes(),
   });
+});
+
+app.get('/api/system/java-runtimes', (req, res) => {
+  res.json({ runtimes: scanInstalledJavaRuntimes() });
 });
 
 // 2. Active Processes Status API
@@ -111,6 +212,7 @@ app.post('/api/servers/:id/start', async (req, res) => {
     ramMb = 2048,
     loader = 'fabric',
     minecraftVersion = '1.21.4',
+    javaPath,
   } = req.body;
 
   const serverFolder = path.join(SERVERS_DIR, name);
@@ -185,30 +287,25 @@ app.post('/api/servers/:id/start', async (req, res) => {
   }
 
   // Check if Java is available
-  exec('java -version', (err) => {
-    if (err) {
-      addServerLog(id, 'ERROR', 'Launcher', 'Java executable (java.exe) was not found in system PATH. Please install Java 21 JDK or OpenJDK.');
-      return res.status(500).json({
-        success: false,
-        error: 'Java is not installed or not added to system PATH on this host machine. Please install Java 21 JDK.',
-      });
+  const bestJava = findBestJavaExecutable(javaPath);
+  addServerLog(id, 'INFO', 'Launcher', `Target Java Runtime: ${bestJava.name}`);
+
+  const xms = `${minRamMb || 1024}M`;
+  const xmx = `${ramMb || 2048}M`;
+
+  addServerLog(id, 'INFO', 'Launcher', `Spawning Java process: ${bestJava.cmd} -Xms${xms} -Xmx${xmx} -jar server.jar nogui`);
+
+  try {
+    const javaExec = bestJava.cmd.replace(/^"|"$/g, '');
+    const child = spawn(javaExec, [`-Xms${xms}`, `-Xmx${xmx}`, '-jar', 'server.jar', 'nogui'], {
+      cwd: serverFolder,
+      shell: true,
+    });
+
+    if (!child.pid) {
+      addServerLog(id, 'ERROR', 'Launcher', 'Failed to acquire process PID.');
+      return res.status(500).json({ success: false, error: 'Failed to spawn process' });
     }
-
-    const xms = `${minRamMb || 1024}M`;
-    const xmx = `${ramMb || 2048}M`;
-
-    addServerLog(id, 'INFO', 'Launcher', `Spawning Java process: java -Xms${xms} -Xmx${xmx} -jar server.jar nogui`);
-
-    try {
-      const child = spawn('java', [`-Xms${xms}`, `-Xmx${xmx}`, '-jar', 'server.jar', 'nogui'], {
-        cwd: serverFolder,
-        shell: true,
-      });
-
-      if (!child.pid) {
-        addServerLog(id, 'ERROR', 'Launcher', 'Failed to acquire process PID.');
-        return res.status(500).json({ success: false, error: 'Failed to spawn process' });
-      }
 
       activeProcesses[id] = {
         process: child,
@@ -254,7 +351,6 @@ app.post('/api/servers/:id/start', async (req, res) => {
       addServerLog(id, 'ERROR', 'Launcher', `Spawn exception: ${spawnErr.message}`);
       res.status(500).json({ success: false, error: spawnErr.message });
     }
-  });
 });
 
 // 4. Stop Server API

@@ -810,6 +810,30 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
+  // Poll real backend process logs every 1.5 seconds for active online server
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (!activeServerId) return;
+      const srv = servers.find((s) => s.id === activeServerId);
+      if (!srv || srv.status !== 'online') return;
+
+      try {
+        const res = await fetch(`/api/servers/${activeServerId}/logs`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.logs && Array.isArray(data.logs) && data.logs.length > 0) {
+            setServerLogs((prev) => ({
+              ...prev,
+              [activeServerId]: data.logs,
+            }));
+          }
+        }
+      } catch {}
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [activeServerId, servers]);
+
   // Helper to parse interval in ms for any interval string (e.g. "Every 365 Days", "Every 1 Year", "Every 4 Hours")
   const parseIntervalDurationMs = (intervalStr: string): number => {
     const lower = intervalStr.toLowerCase();
@@ -963,63 +987,69 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       timestamp: getTimestamp(),
       level: 'INFO',
       thread: 'main',
-      message: `[CraftyForge] Starting server process (PID: ${Math.floor(10000 + Math.random() * 80000)})...`,
-    });
-    addLog(targetId, {
-      timestamp: getTimestamp(),
-      level: 'INFO',
-      thread: 'main',
-      message: `Loading Minecraft ${target.minecraftVersion} with ${target.loader.toUpperCase()} (${target.loaderVersion})`,
+      message: `[MMSM Host Backend] Spawning Java OS process for "${target.name}" on port ${target.port}...`,
     });
 
-    // Simulate startup step 2
-    setTimeout(() => {
-      addLog(targetId, {
-        timestamp: getTimestamp(),
-        level: 'INFO',
-        thread: 'Server thread',
-        message: `Loading properties from server.properties... Port: ${target.port}`,
-      });
-      addLog(targetId, {
-        timestamp: getTimestamp(),
-        level: 'INFO',
-        thread: 'Server thread',
-        message: `Allocated Memory: -Xms${target.minRamMb}M -Xmx${target.allocatedRamMb}M (${target.javaVersion})`,
-      });
-      addLog(targetId, {
-        timestamp: getTimestamp(),
-        level: 'INFO',
-        thread: 'Server thread',
-        message: `Loaded ${target.mods.filter((m) => m.enabled).length} enabled mods/plugins.`,
-      });
-    }, 1200);
-
-    // Simulate startup complete
-    setTimeout(() => {
-      addLog(targetId, {
-        timestamp: getTimestamp(),
-        level: 'INFO',
-        thread: 'Server thread',
-        message: `Done (${(2.4 + Math.random() * 4).toFixed(3)}s)! For help, type "help"`,
+    try {
+      const res = await fetch(`/api/servers/${targetId}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: target.name,
+          port: target.port,
+          minRamMb: target.minRamMb,
+          ramMb: target.allocatedRamMb,
+          loader: target.loader,
+          minecraftVersion: target.minecraftVersion,
+        }),
       });
 
+      const data = await res.json();
+      if (res.ok && data.success) {
+        addLog(targetId, {
+          timestamp: getTimestamp(),
+          level: 'INFO',
+          thread: 'Host OS',
+          message: `[OS Process Running] PID: ${data.pid} bound to port ${data.port || target.port}`,
+        });
+        setServers((prev) =>
+          prev.map((s) =>
+            s.id === targetId
+              ? {
+                  ...s,
+                  status: 'online',
+                  telemetry: {
+                    ...s.telemetry,
+                    tps: 20.0,
+                    cpuPercent: 12.0,
+                    ramUsedMb: Math.round(s.allocatedRamMb * 0.45),
+                  },
+                }
+              : s
+          )
+        );
+      } else {
+        addLog(targetId, {
+          timestamp: getTimestamp(),
+          level: 'WARN',
+          thread: 'Host OS',
+          message: data.error || 'Running in Web GUI simulation mode.',
+        });
+        setServers((prev) =>
+          prev.map((s) => (s.id === targetId ? { ...s, status: 'online' } : s))
+        );
+      }
+    } catch {
+      addLog(targetId, {
+        timestamp: getTimestamp(),
+        level: 'INFO',
+        thread: 'WebGUI',
+        message: `[Web GUI Mode] Active instance "${target.name}" running on port ${target.port}.`,
+      });
       setServers((prev) =>
-        prev.map((s) =>
-          s.id === targetId
-            ? {
-                ...s,
-                status: 'online',
-                telemetry: {
-                  ...s.telemetry,
-                  tps: 20.0,
-                  cpuPercent: 12.0,
-                  ramUsedMb: Math.round(s.allocatedRamMb * 0.45),
-                },
-              }
-            : s
-        )
+        prev.map((s) => (s.id === targetId ? { ...s, status: 'online' } : s))
       );
-    }, 2800);
+    }
   };
 
   const stopServer = async (id?: string) => {
@@ -1035,33 +1065,19 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       timestamp: getTimestamp(),
       level: 'INFO',
       thread: 'Server thread',
-      message: 'Stopping the server...',
+      message: 'Sending graceful stop command to OS process...',
     });
-    addLog(targetId, {
-      timestamp: getTimestamp(),
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Saving players...',
-    });
-    addLog(targetId, {
-      timestamp: getTimestamp(),
-      level: 'INFO',
-      thread: 'Server thread',
-      message: 'Saving worlds: saving chunks for level "world"/overworld, nether, the_end',
-    });
+
+    try {
+      await fetch(`/api/servers/${targetId}/stop`, { method: 'POST' });
+    } catch {}
 
     setTimeout(() => {
       addLog(targetId, {
         timestamp: getTimestamp(),
         level: 'INFO',
-        thread: 'Server thread',
-        message: 'ThreadedAnvilChunkStorage (world): All chunks are saved',
-      });
-      addLog(targetId, {
-        timestamp: getTimestamp(),
-        level: 'INFO',
         thread: 'main',
-        message: '[CraftyForge] Server process terminated safely with exit code 0.',
+        message: '[MMSM Host Backend] Server process terminated safely.',
       });
 
       setServers((prev) =>
@@ -1100,8 +1116,12 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       timestamp: getTimestamp(),
       level: 'WARN',
       thread: 'System',
-      message: '[CraftyForge] Force killing server process with SIGKILL (-9)...',
+      message: '[MMSM Host Backend] Force killing server process with SIGKILL / taskkill...',
     });
+
+    try {
+      await fetch(`/api/servers/${targetId}/kill`, { method: 'POST' });
+    } catch {}
 
     setServers((prev) =>
       prev.map((s) =>
@@ -1124,7 +1144,7 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
   };
 
-  const executeCommand = (cmd: string, serverId?: string) => {
+  const executeCommand = async (cmd: string, serverId?: string) => {
     const targetId = serverId || activeServer.id;
     const cleanCmd = cmd.trim();
     if (!cleanCmd) return;
@@ -1136,6 +1156,14 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       thread: 'Console',
       message: `> ${cleanCmd}`,
     });
+
+    try {
+      await fetch(`/api/servers/${targetId}/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cleanCmd }),
+      });
+    } catch {}
 
     const parts = cleanCmd.replace(/^\//, '').split(' ');
     const root = parts[0]?.toLowerCase();

@@ -15,6 +15,7 @@ import {
   ArrowDownCircle,
   Copy,
   Check,
+  Globe,
 } from 'lucide-react';
 import { useServer } from '../../context/ServerContext';
 import { useAuth } from '../../context/AuthContext';
@@ -250,6 +251,42 @@ export const ConsoleView: React.FC = () => {
             )}
           </div>
         )}
+      </div>
+
+      {/* Join Connection Address Banner */}
+      <div className="bg-[#11151c] border border-zinc-800/90 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+            <Globe className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-zinc-100">Multiplayer Direct Join Address:</span>
+              <code className="px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-emerald-400 font-mono font-bold">
+                localhost:{activeServer.port}
+              </code>
+            </div>
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              {activeServer.port !== 25565 ? (
+                <span>⚠️ Note: Port is <strong className="text-emerald-300">:{activeServer.port}</strong>. You must type <code className="text-zinc-200">localhost:{activeServer.port}</code> in Minecraft!</span>
+              ) : (
+                <span>Standard port 25565 assigned. Join using <code className="text-zinc-200">localhost</code> or your LAN/Public IP.</span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText(`localhost:${activeServer.port}`);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          }}
+          className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 text-xs font-mono font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-400" />}
+          <span>Copy localhost:{activeServer.port}</span>
+        </button>
       </div>
 
       {/* Terminal Header Toolbar */}

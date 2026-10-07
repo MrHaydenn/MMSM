@@ -351,6 +351,21 @@ export const CreateServerWizard: React.FC<CreateServerWizardProps> = ({
                     <span>{portWarning}</span>
                   </p>
                 )}
+
+                <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-800/40 text-[11px] space-y-1">
+                  <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Multiplayer Join Address Notice:</span>
+                  </span>
+                  <p className="text-zinc-300 font-mono">
+                    Join in Minecraft using: <strong className="text-white bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">localhost:{port || 25565}</strong>
+                  </p>
+                  <p className="text-zinc-400 text-[10px] leading-relaxed">
+                    {port !== 25565
+                      ? 'Note: Because this server is set to port ' + (port || 25565) + ', you must include the port number in Minecraft Multiplayer (e.g. localhost:' + (port || 25565) + ').'
+                      : 'Standard Minecraft port 25565 assigned. You can join with localhost or your IP.'}
+                  </p>
+                </div>
               </div>
             </div>
           )}

@@ -197,3 +197,7 @@ On the host, set each stopped server's local idle time to five minutes, save, St
 ## Automatic wake history
 
 Wake tracking is covered by a real loopback proxy/status exchange, burst deduplication, cancellation and bounded persistent history tests, plus HTML escaping tests. Only accepted automatic wake requests are recorded; already-online pings do not create history. The build requires the full Python/UI suites and syntax checks. The history reports the transport peer and protocol intent, not a player's identity or proof of scanning.
+
+## Join-only automatic waking
+
+The real proxy tests now assert repeated status requests leave the server asleep with no wake history or queued start, then join handshakes queue exactly one start and return the reconnect message. The JVM lifecycle test verifies status leaves its sleeping process offline and a join starts it again. Full Python/UI suites, syntax checks and published updater verification are required.

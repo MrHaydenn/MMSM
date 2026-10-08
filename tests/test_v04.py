@@ -5,7 +5,7 @@ from pathlib import Path
 import time
 from unittest.mock import patch
 import test_manager as support
-from test_manager import Base,server
+from test_manager import join_request, Base,server
 from mmsm.manager import Manager
 from mmsm.store import Problem
 from mmsm.network import status
@@ -17,7 +17,8 @@ class LifecycleChanges(Base):
         self.manager.stop(s['id']);self.assertTrue(self.store.server(s['id'])['manual_stop'])
         self.manager.ensure_proxy(s)
         with patch.object(self.manager,'spawn_job') as spawn:
-            report=status(s['port']);self.assertIn('offline',report['description']['text']);spawn.assert_not_called()
+            report=status(s['port']);self.assertIn('offline',report['description']['text'])
+            self.assertIn('offline',join_request(s['port']));spawn.assert_not_called()
         other=Manager(self.store,start_background=False)
         self.assertEqual(other.state(s['id'])['status'],'stopped');other.close()
         self.manager.configure(s['id'],{'memory_mb':2048})
@@ -25,7 +26,9 @@ class LifecycleChanges(Base):
         self.manager.sleep_now(s['id']);self.assertFalse(self.store.server(s['id'])['manual_stop'])
         jobs=[]
         with patch.object(self.manager,'spawn_job',side_effect=jobs.append):
-            report=status(s['port']);self.assertIn('Waking',report['description']['text'])
+            report=status(s['port']);self.assertIn('Join the server',report['description']['text'])
+            self.assertEqual(jobs,[])
+            self.assertIn('try joining again',join_request(s['port']))
         self.assertEqual(len(jobs),1)
         # A delayed ping must not undo a newer, explicit stop.
         self.manager.stop(s['id'])

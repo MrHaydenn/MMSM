@@ -101,7 +101,7 @@ class Manager(Features):
         state = self.state(server['id'])
         if not server['sleep']: return {'reason': 'Sleep disabled'}
         if server.get('manual_stop'): return {'reason': 'Sleep paused by Stop; Start or Sleep now to re-enable'}
-        if state['status'] == 'sleeping': return {'reason': 'Asleep; a Minecraft ping will wake it'}
+        if state['status'] == 'sleeping': return {'reason': 'Asleep; a join attempt will wake it'}
         if state['status'] != 'running': return {'reason': 'Idle timer starts when the server is online'}
         if state.get('status_query_error'): return {'reason': 'Idle timer reset: player status check failed', 'error': state['status_query_error']}
         if state.get('players'): return {'reason': 'Idle timer paused while players are online'}

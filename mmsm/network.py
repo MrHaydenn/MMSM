@@ -150,10 +150,13 @@ class Proxy:
             if intent == 1 and read_packet(client) != b'\0':
                 return
             if server['sleep'] and not server.get('manual_stop') and state['status'] in ('sleeping', 'stopped'):
-                self.manager.wake(self.sid, reason='Minecraft server-list ping' if intent == 1 else 'Minecraft join handshake', source_ip=client.getpeername()[0])
-                message = 'MMSM • Waking up. Reconnect in a moment.'
-            elif state['status'] == 'starting':
-                message = 'MMSM • Starting. Reconnect in a moment.'
+                if intent == 2:
+                    self.manager.wake(self.sid, reason='Minecraft join handshake', source_ip=client.getpeername()[0])
+                    message = 'MMSM • Starting the server. Please wait a moment, then try joining again.'
+                else:
+                    message = 'MMSM • Sleeping. Join the server to start it.'
+            elif state['status'] in ('starting', 'waking'):
+                message = 'MMSM • Starting the server. Please wait a moment, then try joining again.'
             else:
                 message = 'MMSM • Server is offline.'
             if intent == 1:

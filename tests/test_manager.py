@@ -39,6 +39,13 @@ def server(store, sid='testserver', sleep=False):
     return s
 
 
+def join_request(port):
+    with socket.create_connection(('127.0.0.1',port),timeout=3) as client:
+        client.sendall(packet(b'\0'+varint(767)+string('localhost')+struct.pack('>H',port)+b'\2'))
+        buf=Buffer(read_packet(client));assert read_varint(buf)==0
+        return json.loads(exact(buf,read_varint(buf)).decode())['text']
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -265,7 +272,7 @@ class LifecycleTests(Base):
         with patch.object(p,'get',side_effect=lambda url:{'versions':{'1.21':['1.21.1']}} if url==PAPER else [{'id':12,'channel':'STABLE'}]):
             self.assertEqual(p.catalog('paper','1.21.1')['versions'],['12'])
 
-    def test_sleep_wakes_once_on_status_ping(self):
+    def test_sleep_ignores_status_and_wakes_once_on_join(self):
         s=server(self.store,sleep=True);s['launch']={'java':'unused'};self.store.save_server(s)
         proxy=Proxy(self.manager,s['id'],s['port'],'127.0.0.1');self.manager.proxies[s['id']]=proxy
         calls=[]
@@ -273,6 +280,9 @@ class LifecycleTests(Base):
         with patch.object(self.manager,'start',side_effect=start):
             for _ in range(3):
                 response=status(s['port']);self.assertEqual(response['players']['online'],0)
+                self.assertIn('Join the server',response['description']['text'])
+            self.assertEqual(calls,[])
+            for _ in range(3):self.assertIn('try joining again',join_request(s['port']))
             deadline=time.time()+2
             while not calls and time.time()<deadline:time.sleep(.01)
         self.assertEqual(calls,[s['id']])
@@ -345,7 +355,9 @@ class RealJVMTests(Base):
         self.assertFalse(self.manager.alive(s['id']))
         self.assertTrue((self.manager.folder(s['id'])/'world-saved.txt').exists())
         response=status(s['port'])
-        self.assertIn('Waking',response['description']['text'])
+        self.assertIn('Join the server',response['description']['text'])
+        self.assertEqual(self.manager.state(s['id'])['status'],'sleeping')
+        self.assertIn('try joining again',join_request(s['port']))
         wait_running()
         self.manager.stop(s['id'])
         self.assertFalse(self.manager.alive(s['id']))

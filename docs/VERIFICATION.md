@@ -1,3 +1,13 @@
+# Verification record — MMSM 0.8.1 (prepared)
+
+The 126-test full Python suite passed; after final validation changes, all six focused DNS tests passed (the combined suite now contains 127 tests). All 48 JavaScript behavior tests, Python compilation and JavaScript syntax checks passed. Zero skips.
+
+New tests cover server-creation hostname/port validation, Cloudflare record creation, repeated reconciliation without unnecessary writes, external-port updates, rename/clear cleanup, conflicts without overwriting unowned DNS, wrong-zone rejection, retry and disabled/archive dormancy. HTTP tests verify write-only tokens, retained tokens on blank input and incomplete-settings rejection. UI tests verify the fixed base input, opt-in settings and card hostname display.
+
+Cloudflare API responses were simulated. No user token was available, no live DNS records were changed, and authoritative DNS propagation/port forwarding were not tested. UI tests use a minimal DOM harness, not rendered-browser layout. Automatic Cloudflare mode implements API publishing, not an authoritative DNS server or tunnel. This version is prepared in source, not published as a release.
+
+---
+
 # Verification record — MMSM 0.8.0
 
 121 Python tests and 47 JavaScript behavior tests passed locally, zero skips. Python compilation and JavaScript syntax checks passed.

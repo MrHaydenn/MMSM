@@ -276,3 +276,11 @@ node --test tests/ui.test.cjs
 Node is only needed for these development checks, not for running MMSM. The UI tests execute the real UI functions and event handlers with a minimal DOM harness; they do not verify CSS layout or actual browser rendering.
 
 See [VERIFICATION.md](docs/VERIFICATION.md) for the host smoke-test checklist before using important worlds.
+
+### Automatic Cloudflare DNS (0.8.1)
+
+In wrapper Settings, configure the DNS zone, base domain and public entry-point IP. To automate publishing, supply your Cloudflare Zone ID and a scoped API token with Zone Read and DNS Edit permissions for that zone, then enable automatic Minecraft DNS management. The token is stored in the host database; the settings API never returns it. Use HTTPS for public account/settings access and protect host data/backups.
+
+New-server creation shows an editable subdomain before the fixed base domain. Edit existing addresses in the server Public address tab; the full hostname also appears on server headers and dashboard cards. Saving an address publishes its A/AAAA, CNAME and Java SRV records. MMSM retries every five minutes and shows publication status. Existing DNS records are not adopted or overwritten: remove conflicting records manually if you want MMSM to own those names. Renaming/clearing an address removes owned CNAME/SRV records; shared base records remain. Turning automation off, archiving or deleting a server leaves its DNS records in place. Clear its address before deletion if you want automatic record removal. IP changes require editing the public entry-point IP setting; this is not IP discovery or a tunnel.
+
+No NS delegation is needed for Cloudflare API mode. Hosting an authoritative DNS service with delegated NS records is a separate deployment requiring public DNS reachability on TCP/UDP 53. DNS names do not replace Minecraft TCP port forwarding; each separate server needs a distinct external port unless a Minecraft-aware proxy routes connections.

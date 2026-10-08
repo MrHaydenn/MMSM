@@ -49,6 +49,8 @@ class Manager(Features):
                     self.ensure_proxy(s)
                 except OSError as e:
                     self.set_state(s['id'], status='error', error='Public port unavailable: ' + str(e))
+            from .domains import loop as dns_loop
+            threading.Thread(target=dns_loop, args=(self,), daemon=True).start()
             threading.Thread(target=self.syncs.loop, daemon=True).start()
             threading.Thread(target=self.monitor, daemon=True).start()
             threading.Thread(target=self.update_loop, daemon=True).start()
@@ -177,6 +179,8 @@ class Manager(Features):
                           sleep=bool(data.get('sleep', defaults['default_sleep'])),
                           idle_minutes=defaults['idle_minutes'], created=time.time(), mods=[], launch=None,
                           eula=True, directory=self.directory_name(name, sid))
+            from .domains import validate_address
+            server['public_address'] = validate_address(self, {'label':data.get('address_label',''), 'port':data.get('external_port') or port}, sid, port)
             self.store.save_server(server)
             try:
                 self.folder(sid).mkdir(parents=True)
@@ -186,6 +190,9 @@ class Manager(Features):
                 shutil.rmtree(self.folder(sid), ignore_errors=True)
                 self.store.execute('DELETE FROM servers WHERE id=?', (sid,))
                 raise
+        from .domains import publish
+        publish(self, sid)
+        server = self.store.server(sid)
         self.job(sid, 'installing', lambda: self.install(sid, mc, lv))
         return self.public(server)
 

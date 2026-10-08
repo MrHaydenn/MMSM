@@ -343,3 +343,12 @@ test('sync and DNS tabs expose controls and escape names',()=>{
  const html=h.run("syncPanel({sources:[{id:'s',name:'<source>',loader:'fabric',minecraft:'1.2',folders:['config']}],rule:null})");assert.match(html,/&lt;source&gt;/);assert.match(html,/name="runtime"/);assert.match(html,/name="folders"/);
  const address=h.run("addressPanel({configured:false,value:{},records:[]},sample)");assert.match(address,/Configure your DNS zone/);assert.match(address,/does not|not published DNS/);
 });
+
+test('domain input uses fixed readonly base and exposes opt-in Cloudflare settings',()=>{
+ const h=harness();const html=h.run("domainFields('minecraft.example.com','address_label','trigon')");
+ assert.match(html,/Server IP\/domain/);assert.match(html,/name="address_label"/);assert.match(html,/value="\.minecraft.example.com" readonly/);
+ const settings=h.run("settingsPage({web_port:11015,running_web_port:11015,default_memory_mb:4096,dns_token_saved:true})");
+ assert.match(settings,/name="dns_auto" type="checkbox" >/);assert.match(settings,/Token saved/);assert.match(settings,/name="dns_token" type="password" value=""/);
+ const card=h.run('serverCard('+JSON.stringify({...sample,public_hostname:'trigon.minecraft.example.com'})+')');
+ assert.match(card,/trigon.minecraft.example.com/);
+});

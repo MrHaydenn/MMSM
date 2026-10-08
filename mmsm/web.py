@@ -315,12 +315,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/settings':
             self.role('admin')
             if method == 'GET':
-                self.reply({**store.settings(), 'running_web_port': self.server.server_port, 'running_bind_host': self.server.server_address[0], 'wrapper_update': manager.updater.status()}); return
+                safe = store.settings(); safe['dns_token_saved'] = bool(safe.pop('dns_token', ''))
+                self.reply({**safe, 'running_web_port': self.server.server_port, 'running_bind_host': self.server.server_address[0], 'wrapper_update': manager.updater.status()}); return
             if method == 'PUT':
-                allowed = {'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
+                allowed = {'dns_auto', 'dns_zone_id', 'dns_token', 'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
                 require(set(data) <= allowed, 'Unknown setting')
                 from .web_config import public_origin
                 if 'public_origin' in data:data['public_origin']=public_origin(data['public_origin'])
+                if data.get('dns_token') == '': data.pop('dns_token')
+                require(isinstance(data.get('dns_token', ''), str) and len(data.get('dns_token', ''))<=512 and not any(c in data.get('dns_token', '') for c in '\r\n'), 'Invalid DNS token')
                 values = {**store.settings(), **data}
                 from .domains import validate_settings
                 validate_settings(values)
@@ -341,6 +344,9 @@ class Handler(BaseHTTPRequestHandler):
                 ports = {p for s in store.servers() for p in (s['port'], s['internal_port'])}
                 require(values['web_port'] not in ports, 'Web port conflicts with a Minecraft port')
                 store.set_settings(data)
+                if values.get('dns_auto'):
+                    from .domains import publish_all
+                    manager.spawn_job(lambda: publish_all(manager))
                 store.audit(self.user['username'], 'Changed global settings')
                 self.reply({'saved': True, 'restart_required': values['web_port'] != self.server.server_port or values['bind_host'] != self.server.server_address[0] or (values['public_origin'] or None) != self.server.origin}); return
         if path == '/api/users':

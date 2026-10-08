@@ -1,7 +1,9 @@
-"""DNS plans for Java Edition; does not publish DNS or configure routing."""
+"""DNS plans for Java Edition; optional Cloudflare publishing; does not configure routing."""
 import ipaddress
 import re
-from .store import require
+import threading
+PUBLISH_LOCK = threading.RLock()
+from .store import require, Problem
 
 
 def hostname(value):
@@ -12,6 +14,11 @@ def hostname(value):
 
 
 def validate_settings(data):
+    require(type(data.get('dns_auto', False)) is bool, 'Invalid DNS automation preference')
+    if data.get('dns_auto'):
+        require(isinstance(data.get('dns_zone_id'), str) and re.fullmatch(r'[a-fA-F0-9]{32}', data['dns_zone_id']), 'Enter the Cloudflare Zone ID')
+        require(bool(data.get('dns_token')), 'Enter a Cloudflare API token')
+        require(all(data.get(k) for k in ('dns_zone','dns_base','dns_ip')), 'Configure the DNS zone, base domain and public IP before enabling automation')
     if not any(data.get(k) for k in ('dns_zone', 'dns_base', 'dns_ip')): return
     zone = hostname(data.get('dns_zone', '')); base = hostname(data.get('dns_base', ''))
     require(base.endswith('.' + zone), 'Base domain must be a subdomain of your DNS zone')
@@ -23,11 +30,11 @@ def validate_settings(data):
 def plan(settings, server):
     configured = all(settings.get(k) for k in ('dns_zone', 'dns_base', 'dns_ip'))
     value = server.get('public_address', {})
-    if not configured: return {'configured': False, 'value': value, 'records': []}
+    if not configured: return {'configured': False, 'value': value, 'records': [], 'automation': server.get('dns_status', 'Not published'), 'automatic': settings.get('dns_auto', False)}
     validate_settings(settings)
     base = hostname(settings['dns_base']); zone = hostname(settings['dns_zone'])
     label = value.get('label', '')
-    if not label: return {'configured': True, 'base': base, 'value': value, 'records': []}
+    if not label: return {'configured': True, 'base': base, 'value': value, 'records': [], 'automation': server.get('dns_status', 'Not published'), 'automatic': settings.get('dns_auto', False)}
     domain = label + '.' + base; port = value.get('port', server['port'])
     relative = lambda name: name[:-len(zone)-1] if name.endswith('.' + zone) else name
     address = ipaddress.ip_address(settings['dns_ip'])
@@ -36,19 +43,100 @@ def plan(settings, server):
                 {'type': 'A' if address.version == 4 else 'AAAA', 'name': relative(base), 'content': str(address), 'proxy': 'DNS only'},
                 {'type': 'CNAME', 'name': relative(domain), 'content': base, 'proxy': 'DNS only'},
                 {'type': 'SRV', 'name': relative('_minecraft._tcp.' + domain), 'content': f'0 5 {port} {base}', 'proxy': 'DNS only'}],
+            'automation': server.get('dns_status', 'Not published'), 'automatic': settings.get('dns_auto', False),
             'srv': {'service': '_minecraft', 'protocol': '_tcp', 'priority': 0, 'weight': 5, 'port': port, 'target': base},
             'forwarding': f'TCP external port {port} → MMSM host port {server["port"]} (not its internal backend port).'}
 
 
 def save(manager, sid, data):
-    with manager.locks[sid]:
-        server = manager.active(sid); label = str(data.get('label', '')).strip().lower()
-        require(not label or re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label), 'Choose one DNS label: letters, numbers and hyphens')
-        port = int(data.get('port', server['port']))
-        require(1 <= port <= 65535, 'External port must be 1–65535')
-        require(not label or not any(s['id'] != sid and s.get('public_address', {}).get('label') == label for s in manager.store.servers()), 'That public name is already assigned', 409)
-        server['public_address'] = {'label': label, 'port': port}
+    with manager.lock, manager.locks[sid]:
+        server = manager.active(sid)
+        server['public_address'] = validate_address(manager, data, sid, server['port'])
         result = plan(manager.store.settings(), server)
-        require(result['configured'] or not label, 'Configure the DNS zone, base domain and public IP in wrapper Settings first')
+        require(result['configured'] or not server['public_address']['label'], 'Configure the DNS zone, base domain and public IP in wrapper Settings first')
         manager.store.save_server(server)
-        return result
+    publish(manager, sid)
+    return plan(manager.store.settings(), manager.store.server(sid))
+
+
+def validate_address(manager, data, sid=None, default_port=25565):
+    label = str(data.get('label', '')).strip().lower()
+    require(not label or re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label), 'Choose one DNS label: letters, numbers and hyphens')
+    port = int(data.get('port', default_port))
+    require(1 <= port <= 65535, 'External port must be 1–65535')
+    require(not label or not any(s['id'] != sid and s.get('public_address', {}).get('label') == label for s in manager.store.servers()), 'That public name is already assigned', 409)
+    require(not label or all(manager.store.settings().get(k) for k in ('dns_zone','dns_base','dns_ip')), 'Configure Minecraft domains in wrapper Settings first')
+    if label: hostname(label + '.' + hostname(manager.store.settings()['dns_base']))
+    return {'label': label, 'port': port}
+
+
+def cloudflare(settings, method, suffix, body=None):
+    import json
+    import urllib.request
+    import urllib.error
+    url = 'https://api.cloudflare.com/client/v4/zones/' + settings['dns_zone_id'] + suffix
+    request = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None,
+        headers={'Authorization': 'Bearer ' + settings['dns_token'], 'Content-Type': 'application/json'}, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            value = json.load(response)
+        require(value.get('success') is True, 'Cloudflare rejected the DNS request', 502)
+        return value['result']
+    except (urllib.error.URLError, ValueError):
+        raise ValueError('Cloudflare DNS request failed. Check the zone ID, token permissions and network connection.') from None
+
+
+def publish(manager, sid):
+    # Server lock prevents edits from racing publication; failed operations are retried.
+    from urllib.parse import urlencode
+    with manager.locks[sid], PUBLISH_LOCK:
+        settings = manager.store.settings(); server = manager.store.server(sid)
+        if not settings.get('dns_auto') or server['archived']: return
+        try:
+            validate_settings(settings)
+            # Verify the supplied ID belongs to the configured zone before writing.
+            zone = cloudflare(settings, 'GET', '')
+            require(zone['name'].lower() == hostname(settings['dns_zone']), 'Cloudflare Zone ID does not match DNS zone')
+            desired = plan(settings, server)['records']; owned = server.get('dns_managed', [])
+            live = []
+            for record in desired:
+                name = record['name'] + '.' + hostname(settings['dns_zone'])
+                comment = 'MMSM:' + ('base' if record['type'] in ('A','AAAA') else sid)
+                rows = cloudflare(settings, 'GET', '/dns_records?' + urlencode({'name': name, 'per_page':100}))
+                require(not rows or len(rows)==1 and rows[0].get('comment')==comment and rows[0]['type']==record['type'], 'DNS conflict at ' + name + '. Existing records are not owned by MMSM; remove them manually to let MMSM manage this name.')
+                body = {'type':record['type'], 'name':name, 'content':record['content'], 'ttl':1, 'comment':comment}
+                if record['type'] != 'SRV': body['proxied'] = False
+                saved = rows[0] if rows and all(rows[0].get(k)==v for k,v in body.items()) else cloudflare(settings, 'PUT' if rows else 'POST', '/dns_records' + ('/'+rows[0]['id'] if rows else ''), body)
+                if comment != 'MMSM:base':
+                    entry = {'id':saved['id'], 'zone':settings['dns_zone_id'], 'name':name}
+                    live.append(entry)
+                    if entry not in owned: owned.append(entry)
+                    server['dns_managed'] = owned; manager.store.save_server(server)
+            for entry in owned[:]:
+                if entry in live: continue
+                require(entry['zone']==settings['dns_zone_id'], 'Old DNS records belong to another zone; remove them manually before changing the Zone ID')
+                rows = cloudflare(settings,'GET','/dns_records?' + urlencode({'name':entry['name']}))
+                old = next((r for r in rows if r['id']==entry['id']),None)
+                if old:
+                    require(old.get('comment')=='MMSM:'+sid, 'Old DNS record ownership changed; remove it manually')
+                    cloudflare(settings,'DELETE','/dns_records/'+entry['id'])
+                owned.remove(entry)
+                server['dns_managed']=owned;manager.store.save_server(server)
+            server['dns_status'] = 'Published to Cloudflare' if desired else 'Address removed from Cloudflare'
+        except Exception as error:
+            server['dns_status'] = 'DNS publishing failed: ' + str(error)
+        manager.store.save_server(server)
+
+
+def publish_all(manager):
+    for server in manager.store.servers(False):
+        if server.get('public_address', {}).get('label') or server.get('dns_managed'):
+            try: publish(manager, server['id'])
+            except Problem as error:
+                if error.status != 404: raise  # Deletion can race acquiring the server lock.
+
+
+def loop(manager):
+    while not manager.closing.is_set():
+        publish_all(manager)
+        if manager.closing.wait(300): break

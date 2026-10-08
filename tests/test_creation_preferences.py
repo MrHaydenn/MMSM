@@ -35,6 +35,12 @@ class Creation(support.Base):
             created = self.manager.create(dict(name='Synced',source_id=source['id'],source_mode='sync'))
         self.assertTrue(self.store.server(created['id'])['sync']['settings'])
         self.assertTrue(self.store.server(created['id'])['sync']['runtime'])
+        source['memory_mb'] = 4096
+        self.store.save_server(source)
+        self.manager.write_properties(source, {'motd': 'Synced properties'})
+        self.manager.syncs.run(created['id'])
+        self.assertEqual(self.store.server(created['id'])['memory_mb'], 4096)
+        self.assertEqual(self.manager.properties(created['id'])['motd'], 'Synced properties')
 
 class Username(support.HTTPTests):
     test_setup_auth_csrf_roles_and_session_revocation=None

@@ -98,7 +98,7 @@ class Syncs:
                     for name in folders:
                         require(name not in (m.properties(sid).get('level-name', 'world'), m.properties(source_id).get('level-name', 'world')), 'World folders cannot be synced')
                     digest = self.digest(src, folders)
-                    metadata = [m.properties(source_id) if rule.get('settings') else {}, source['minecraft'], source['loader_version'], source.get('mods', []) if 'mods' in folders or 'plugins' in folders else []]
+                    metadata = [{**m.properties(source_id), **{k:source[k] for k in ('memory_mb','sleep','idle_minutes')}} if rule.get('settings') else {}, source['minecraft'], source['loader_version'], source.get('mods', []) if 'mods' in folders or 'plugins' in folders else []]
                     signature = hashlib.sha256((digest + json.dumps(metadata, sort_keys=True)).encode()).hexdigest()
                     current = self.digest(dest, folders)
                     require(not rule.get('destination_digest') or current == rule['destination_digest'], 'Destination files changed outside MMSM. Unlink and recreate the sync to replace them.')
@@ -132,6 +132,9 @@ class Syncs:
                     else:
                         rule['status'] = 'Up to date'; target['sync'] = rule; m.store.save_server(target)
                     if rule.get('settings'):
+                        target = m.store.server(sid)
+                        for key in ('memory_mb','sleep','idle_minutes'): target[key] = source[key]
+                        m.store.save_server(target)
                         from .manager import PROTECTED_PROPERTIES
                         m.write_properties(m.store.server(sid), {k:v for k,v in m.properties(source_id).items() if k not in PROTECTED_PROPERTIES})
                     return rule

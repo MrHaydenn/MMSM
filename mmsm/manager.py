@@ -519,7 +519,7 @@ class Manager(Features):
         self.store.notify(sid, 'Server process was force-killed. Unsaved world changes may have been lost.')
         return {'killed': True}
 
-    def wake(self, sid):
+    def wake(self, sid, reason="Wake request", source_ip=None):
         # Ping bursts must not queue dozens of starts behind an installation lock.
         lock = self.locks[sid]
         if not lock.acquire(blocking=False):
@@ -528,15 +528,28 @@ class Manager(Features):
             s = self.active(sid)
             if not s['sleep'] or s.get('manual_stop') or sid in self.operation_guards or self.alive(sid) or self.state(sid)['status'] not in ('sleeping', 'stopped'):
                 return
+            event={'id':secrets.token_hex(8),'time':time.time(),'reason':reason,'source_ip':source_ip,'result':'Requested'}
+            s['wake_history']=[event,*s.get('wake_history',[])][:50]
+            self.store.save_server(s)
             self.set_state(sid, status='waking')
         finally:
             lock.release()
+        def outcome(result):
+            with self.locks[sid]:
+                if not self.store.rows('SELECT 1 FROM servers WHERE id=?',(sid,)):return
+                saved=self.store.server(sid)
+                for row in saved.get('wake_history',[]):
+                    if row['id']==event['id']:row['result']=result
+                self.store.save_server(saved)
         def wake_job():
             try:
                 with self.locks[sid]:
-                    if self.store.server(sid).get('manual_stop') or self.state(sid)['status'] != 'waking': return
+                    if self.store.server(sid).get('manual_stop') or self.state(sid)['status'] != 'waking':
+                        outcome('Cancelled');return
                     self.start(sid, automatic=True)
+                    outcome('Java started')
             except Exception as e:
+                outcome('Failed: '+str(e)[:300])
                 if self.state(sid)['status'] != 'crashed': self.set_state(sid, status='error', error=str(e))
         self.spawn_job(wake_job)
 

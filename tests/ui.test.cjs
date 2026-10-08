@@ -443,3 +443,8 @@ test('sleep diagnostics are visible and sync excludes operational settings',asyn
  assert.doesNotMatch(html,/name="settings"/);
  assert.match(html,/Sleep, idle time, RAM, AutoStart and server properties stay independent/);
 });
+
+test('wake history shows the source and result with safe escaping',()=>{
+ const h=harness();h.context.s={wake_history:[{time:1,reason:'Minecraft server-list ping',source_ip:'<unsafe>',result:'Java started'}]};
+ const html=h.run('wakeHistory(s)');assert.match(html,/Minecraft server-list ping/);assert.match(html,/&lt;unsafe&gt;/);assert.match(html,/Java started/);
+});

@@ -6,7 +6,7 @@ New coverage: duplicate public-port creation with explicit override, rejection o
 
 Limits: live Minecraft distributions were not booted for these features, and runtime sync provider installation is mocked in its focused test. Existing loader and process tests remain in the suite. Browser tests use the minimal DOM harness, not visual rendering. DNS generation makes no external changes; no Cloudflare account, authoritative DNS propagation, router forwarding or Windows-host networking was tested. Automatic sync waits for both servers to stop. Runtime installation commits separately from folder replacement and keeps its existing runtime backup if a later folder operation fails.
 
-This version is committed for review; release-request.json remains at the previously approved version until the owner approves publication.
+The owner approved publication of 0.8.0. GitHub repeats the suite before publishing the release assets.
 
 ---
 

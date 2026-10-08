@@ -20,7 +20,7 @@ Startup installs missing `psutil` and Pillow into `dependencies/` using this Pyt
 
 **Automatic EULA acceptance now defaults ON** for fresh/unset settings, as requested. An explicitly saved choice is preserved on upgrade; change it in Settings if needed. Port 11015 remains the fresh-install default.
 
-## New in 0.8.0 (awaiting release approval)
+## New in 0.8.0
 
 - Server creation can override a duplicate public Minecraft port after a warning. Internal backend and WebGUI ports cannot be overridden. Only one server can own a shared listener: stop its current owner (including sleeping servers) before starting another.
 - Server > Syncs configures a one-way mirror from another non-archived, same-loader server. Select top-level folders such as config, mods, plugins or defaultconfigs; optionally follow Minecraft/loader versions. Checks run every 30 seconds and changes wait until both servers are stopped. Sources may have multiple destinations; chained/cyclic syncs are blocked. Sources must be visible to the configuring account.

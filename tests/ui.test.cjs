@@ -362,3 +362,13 @@ test('favicon refresh follows the saved logo revision and update channel exposes
  assert.match(html,/name="update_channel"/);assert.match(html,/value="stable"/);assert.match(html,/value="experimental" selected/);
  assert.match(h.run("wrapperUpdateText({status:'available',latest:'0.8.1',channel:'experimental',revision:'abcdef012345'})"),/experimental abcdef0/);
 });
+
+test('wrapper settings is a footer gear before the version and respects global admin permissions',()=>{
+ const h=harness();h.run("route='settings';shell()");let html=h.elements.get('#app').innerHTML;
+ assert.doesNotMatch(html.split('</nav>')[0],/data-route="settings"/);
+ const footer=html.split('class="sidebar-bottom"')[1].split('</aside>')[0];
+ assert.match(footer,/footer-settings active/);assert.match(footer,/aria-label="Wrapper settings"/);assert.match(footer,/aria-current="page"/);
+ assert.ok(footer.indexOf('data-route="settings"')<footer.indexOf('MMSM 0.8.1'));
+ h.run("user={role:'viewer',username:'Viewer'};shell()");assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="settings"/);
+ h.run("user={role:'admin',username:'Limited',server_ids:['s1']};shell()");assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="settings"/);
+});

@@ -292,3 +292,7 @@ Stable (the default) follows published releases. Experimental follows the latest
 Ordinary pushes publish experimental builds after tests pass, and never publish stable releases. Stable publication requires explicit owner authorization and a changed release-request.json matching the program version. For this 0.8.1 release, the owner explicitly requested publication; future pushes must not change that release marker unless the owner requests another release.
 
 The browser tab icon uses the saved launcher image, with the top-left cube as default. Uploading a new logo refreshes it immediately in that browser; other signed-in tabs refresh branding within 30 seconds.
+
+### Experimental changes after 0.8.1
+
+Wrapper Settings is now a gear beside the version number at the bottom of the sidebar (also accessible in the compact mobile layout). It retains global administrator access restrictions. Usernames preserve their typed capitalization, while login and duplicate-name detection are case-insensitive; passwords remain case-sensitive. Existing account capitalization is unchanged.

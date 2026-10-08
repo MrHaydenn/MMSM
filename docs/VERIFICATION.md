@@ -1,3 +1,9 @@
+# Experimental sidebar change after 0.8.1
+
+134 Python tests and 50 JavaScript behavior tests passed, with zero skips. Compilation and JavaScript syntax checks passed. A registration/session integration test verifies preserved username capitalization, mixed-case sign-in, duplicate rejection and case-sensitive passwords. UI checks verify the footer gear placement, active state and global-admin visibility restrictions. Mobile footer visibility is retained in CSS; rendered-browser layout is unverified. This push does not change the stable release request.
+
+---
+
 # MMSM 0.8.1 browser branding and update channels
 
 133 Python tests and 49 JavaScript behavior tests passed, with zero skips. Python compilation and JavaScript syntax checks passed. New tests cover public favicon default/upload/replacement, revision refresh, channel validation, experimental commit identity, stable fallback, checksum and package channel/revision stamping. The experimental and stable publication workflows repeat tests and verify their live manifests/downloads through the real updater. Browser layout and live Cloudflare changes remain unverified.

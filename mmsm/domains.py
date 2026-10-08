@@ -15,13 +15,20 @@ def hostname(value):
 
 def validate_settings(data):
     require(type(data.get('dns_auto', False)) is bool, 'Invalid DNS automation preference')
-    if data.get('dns_auto'):
+    provider=data.get('dns_provider','cloudflare')
+    require(provider in ('cloudflare','unm'), 'Choose Cloudflare or UNM DNS')
+    if provider=='unm' and data.get('unm_url'): unm_url(data['unm_url'])
+    if data.get('dns_auto') and provider=='unm':
+        unm_url(data.get('unm_url',''))
+        require(bool(data.get('unm_token')), 'Enter a UNM integration token')
+        require(data.get('dns_base')==data.get('dns_zone'), 'For UNM, DNS zone and base domain must both be the delegated zone')
+    if data.get('dns_auto') and provider=='cloudflare':
         require(isinstance(data.get('dns_zone_id'), str) and re.fullmatch(r'[a-fA-F0-9]{32}', data['dns_zone_id']), 'Enter the Cloudflare Zone ID')
         require(bool(data.get('dns_token')), 'Enter a Cloudflare API token')
         require(all(data.get(k) for k in ('dns_zone','dns_base','dns_ip')), 'Configure the DNS zone, base domain and public IP before enabling automation')
     if not any(data.get(k) for k in ('dns_zone', 'dns_base', 'dns_ip')): return
     zone = hostname(data.get('dns_zone', '')); base = hostname(data.get('dns_base', ''))
-    require(base.endswith('.' + zone), 'Base domain must be a subdomain of your DNS zone')
+    require(base.endswith('.' + zone) or data.get('dns_provider')=='unm' and base==zone, 'Base domain must be a subdomain of your DNS zone')
     try: address = ipaddress.ip_address(data.get('dns_ip', ''))
     except ValueError: raise ValueError('Enter the public IPv4 or IPv6 address of your Minecraft entry point')
     require(address.is_global, 'Enter a public IP address, not a LAN or loopback address')
@@ -38,6 +45,13 @@ def plan(settings, server):
     domain = label + '.' + base; port = value.get('port', server['port'])
     relative = lambda name: name[:-len(zone)-1] if name.endswith('.' + zone) else name
     address = ipaddress.ip_address(settings['dns_ip'])
+    if settings.get('dns_provider')=='unm':
+        return {'configured':True,'provider':'unm','base':base,'hostname':domain,'value':value,
+                'srv':dict(port=port,target=domain),
+                'records':[{'type':'A','name':label,'content':str(address),'proxy':'DNS only'},
+                           {'type':'SRV','name':'_minecraft._tcp.'+label,'content':f'0 5 {port} {domain}','proxy':'DNS only'}],
+                'automation':server.get('dns_status','Not published'),'automatic':settings.get('dns_auto',False),
+                'forwarding':f'TCP external port {port} → MMSM host port {server["port"]}. Configure forwarding in UNM separately.'}
     return {'configured': True, 'base': base, 'hostname': domain, 'value': value,
             'records': [
                 {'type': 'A' if address.version == 4 else 'AAAA', 'name': relative(base), 'content': str(address), 'proxy': 'DNS only'},
@@ -94,6 +108,19 @@ def publish(manager, sid):
         if not settings.get('dns_auto') or server['archived']: return
         try:
             validate_settings(settings)
+            if settings.get('dns_provider')=='unm':
+                require(not server.get('dns_managed'), 'Remove previous Cloudflare records before switching providers')
+                identity={'url':unm_url(settings['unm_url']),'zone':settings['dns_zone']}
+                require(not server.get('unm_managed') or server['unm_managed']==identity, 'Clear the address using the previous UNM endpoint and zone before changing them')
+                value=server.get('public_address',{})
+                wanted=bool(value.get('label'))
+                result=unm_request(settings,sid,{'zone':settings['dns_zone'],'label':value['label'],'port':value.get('port',server['port'])} if wanted else None)
+                require(not wanted or result.get('hostname')==value['label']+'.'+settings['dns_base'], 'UNM token zone does not match the base domain')
+                server['unm_managed']=identity if wanted else None
+                server['dns_status']='Published to UNM' if wanted else 'Address removed from UNM'
+                manager.store.save_server(server)
+                return
+            require(not server.get('unm_managed'), 'Clear the address with UNM before switching providers')
             # Verify the supplied ID belongs to the configured zone before writing.
             zone = cloudflare(settings, 'GET', '')
             require(zone['name'].lower() == hostname(settings['dns_zone']), 'Cloudflare Zone ID does not match DNS zone')
@@ -130,7 +157,7 @@ def publish(manager, sid):
 
 def publish_all(manager):
     for server in manager.store.servers(False):
-        if server.get('public_address', {}).get('label') or server.get('dns_managed'):
+        if server.get('public_address', {}).get('label') or server.get('dns_managed') or server.get('unm_managed'):
             try: publish(manager, server['id'])
             except Problem as error:
                 if error.status != 404: raise  # Deletion can race acquiring the server lock.
@@ -140,3 +167,34 @@ def loop(manager):
     while not manager.closing.is_set():
         publish_all(manager)
         if manager.closing.wait(300): break
+
+
+def unm_url(value):
+    from urllib.parse import urlsplit
+    require(isinstance(value,str), 'Enter the UNM URL')
+    u=urlsplit(value)
+    require(u.scheme in ('http','https') and bool(u.hostname) and not u.username and not u.password and not u.query and not u.fragment and u.path in ('','/'), 'Use a UNM origin URL without a path or credentials')
+    require(u.scheme=='https' or u.hostname in ('127.0.0.1','localhost','::1'), 'Use HTTPS or a localhost SSH tunnel for the UNM token')
+    return value.rstrip('/')
+
+
+def unm_request(settings, sid, body):
+    import json
+    import urllib.request
+    import urllib.error
+    from urllib.parse import quote
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+    req=urllib.request.Request(unm_url(settings['unm_url'])+'/api/integrations/servers/'+quote(sid,safe=''),
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={'Authorization':'Bearer '+settings['unm_token'],'Content-Type':'application/json'},method='PUT' if body is not None else 'DELETE')
+    try:
+        with urllib.request.build_opener(NoRedirect()).open(req,timeout=20) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        try: message=json.loads(error.read(16384)).get('error','Request rejected')
+        except (ValueError,AttributeError): message='Request rejected'
+        raise ValueError('UNM DNS: '+message) from None
+    except (urllib.error.URLError,ValueError):
+        raise ValueError('Cannot contact UNM DNS. Check the URL, SSH tunnel, token and backend status.') from None

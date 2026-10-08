@@ -372,3 +372,18 @@ test('wrapper settings is a footer gear before the version and respects global a
  h.run("user={role:'viewer',username:'Viewer'};shell()");assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="settings"/);
  h.run("user={role:'admin',username:'Limited',server_ids:['s1']};shell()");assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="settings"/);
 });
+
+
+test('UNM DNS settings select the provider and keep the stored token out of HTML',()=>{
+ const h=harness();const html=h.run("settingsPage({default_memory_mb:4096,dns_provider:'unm',unm_token_saved:true})");
+ assert.match(html,/value="unm" selected/);
+ assert.match(html,/name="unm_token" type="password" value=""/);
+ assert.match(html,/name="unm_url"/);
+ assert.match(html,/forwarding remains separate/);
+});
+
+test('UNM address panel renders the server A record and SRV target',()=>{
+ const h=harness();const html=h.run("addressPanel({configured:true,provider:'unm',base:'minecraft.example.com',hostname:'test.minecraft.example.com',value:{label:'test',port:25565},records:[{type:'A',name:'test',content:'8.8.8.8',proxy:'DNS only'}],srv:{port:25565,target:'test.minecraft.example.com'},automatic:true,automation:'Published to UNM'},{port:25565})");
+ assert.match(html,/Published to UNM/);assert.match(html,/UNM owns the A and SRV/);
+ assert.match(html,/target test.minecraft.example.com/);
+});

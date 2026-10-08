@@ -320,15 +320,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/settings':
             self.role('admin')
             if method == 'GET':
-                safe = store.settings(); safe['dns_token_saved'] = bool(safe.pop('dns_token', ''))
+                safe = store.settings(); safe['dns_token_saved'] = bool(safe.pop('dns_token', '')); safe['unm_token_saved'] = bool(safe.pop('unm_token', ''))
                 self.reply({**safe, 'running_web_port': self.server.server_port, 'running_bind_host': self.server.server_address[0], 'wrapper_update': manager.updater.status()}); return
             if method == 'PUT':
-                allowed = {'update_channel', 'dns_auto', 'dns_zone_id', 'dns_token', 'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
+                allowed = {'dns_provider', 'unm_url', 'unm_token', 'update_channel', 'dns_auto', 'dns_zone_id', 'dns_token', 'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
                 require(set(data) <= allowed, 'Unknown setting')
                 from .web_config import public_origin
                 if 'public_origin' in data:data['public_origin']=public_origin(data['public_origin'])
                 if data.get('dns_token') == '': data.pop('dns_token')
                 require(isinstance(data.get('dns_token', ''), str) and len(data.get('dns_token', ''))<=512 and not any(c in data.get('dns_token', '') for c in '\r\n'), 'Invalid DNS token')
+                if data.get('unm_token') == '': data.pop('unm_token')
+                require(isinstance(data.get('unm_token',''),str) and len(data.get('unm_token',''))<=512 and not any(c in data.get('unm_token','') for c in '\r\n'), 'Invalid UNM token')
                 values = {**store.settings(), **data}
                 from .domains import validate_settings
                 validate_settings(values)

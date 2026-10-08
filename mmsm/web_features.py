@@ -40,10 +40,10 @@ def validate_scope(store,data):
     return json.dumps(sorted(set(ids)))
 
 
-def notification_rows(h):
+def notification_rows(h, include_read=False):
     store=h.server.manager.store
     return [dict(row,payload=json.loads(row['payload']),seen=int(bool(row['read_id']))) for row in store.rows(
-        'SELECT n.*, r.notification_id AS read_id FROM notifications n LEFT JOIN notification_reads r ON r.notification_id=n.id AND r.user_id=? ORDER BY n.created DESC',(h.user['id'],))
+        'SELECT n.*, r.notification_id AS read_id FROM notifications n LEFT JOIN notification_reads r ON r.notification_id=n.id AND r.user_id=? WHERE (? OR r.notification_id IS NULL) ORDER BY n.created DESC',(h.user['id'], int(include_read)))
         if (row['server_id'] is None and scope(h) is None or row['server_id'] and can_see(h,row['server_id']) and not store.server(row['server_id'])['archived'])][:100]
 
 
@@ -118,7 +118,7 @@ def extra_route(h):
         h.reply({'ok':True});return True
     if path=='/api/notifications/action' and method=='POST':
         h.role('admin')
-        row=next((r for r in notification_rows(h) if r['id']==data.get('id')),None)
+        row=next((r for r in notification_rows(h, True) if r['id']==data.get('id')),None)
         require(row,'Notification not found',404);require(row['kind']=='whitelist','This notification has no whitelist action')
         require(data.get('action') in ('whitelist','ignore'),'Invalid notification action')
         result={}

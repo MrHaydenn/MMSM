@@ -41,6 +41,7 @@ class Manager(Features):
         from .updater import Updater
         self.updater = Updater(self)
         from .unm_tunnel import UNMTunnel
+        self.store.set_settings({'unm_tunnel_enabled': False})
         self.unm_tunnel = UNMTunnel(self)
         self.initialize_features()
         from .syncs import Syncs
@@ -144,6 +145,13 @@ class Manager(Features):
 
     def create(self, data):
         defaults = self.store.settings()
+        source_id = data.get('source_id')
+        source = None
+        if source_id:
+            source = self.idle(source_id)
+            require(not source.get('sync'), 'Choose a source that does not follow another server')
+            require(data.get('source_mode', 'copy') in ('copy', 'sync'), 'Choose copy or sync')
+            data = {**data, 'loader': source['loader'], 'minecraft': source['minecraft'], 'loader_version': source['loader_version'], 'memory_mb': source['memory_mb'], 'sleep': source['sleep']}
         name = str(data.get('name', '')).strip()
         require(1 <= len(name) <= 64, 'Server name must be 1–64 characters')
         loader = data.get('loader', defaults['default_loader'])
@@ -154,11 +162,19 @@ class Manager(Features):
         lv = mc if loader == 'vanilla' else str(data.get('loader_version', ''))
         require(re.fullmatch(r'[a-zA-Z0-9_.+\-]{1,100}', mc) and re.fullmatch(r'[a-zA-Z0-9_.+\-]{1,100}', lv), 'Select Minecraft and loader versions')
         require(defaults['auto_eula'], 'Enable automatic EULA acceptance in Settings after reviewing the Minecraft EULA')
-        port = int(data.get('port', 25565))
-        require(1024 <= port <= 65535, 'Public port must be 1024–65535')
+        port = int(data['port']) if data.get('port') not in (None, '') else None
+        require(port is None or 1024 <= port <= 65535, 'Public port must be 1024–65535')
         with self.lock:
             reserved = {p for s in self.store.servers() for p in (s['port'], s['internal_port'])}
             reserved.add(self.store.settings()['web_port'])
+            if port is None:
+                for candidate in range(defaults.get('default_port_min',25565), defaults.get('default_port_max',25665)+1):
+                    if candidate in reserved: continue
+                    with socket.socket() as test:
+                        try: test.bind(('0.0.0.0', candidate))
+                        except OSError: continue
+                    port = candidate; break
+                require(port is not None, 'No unused port is available in the default range', 409)
             conflicts = [s for s in self.store.servers() if s['port'] == port]
             require(port != defaults['web_port'] and all(s['internal_port'] != port for s in self.store.servers()), 'Port is reserved for MMSM or an internal server connection', 409)
             require(not conflicts or data.get('allow_port_conflict') is True,
@@ -179,7 +195,7 @@ class Manager(Features):
             server = dict(id=sid, name=name, loader=loader, minecraft=mc, loader_version=lv,
                           memory_mb=memory, port=port, internal_port=internal, archived=False,
                           sleep=bool(data.get('sleep', defaults['default_sleep'])),
-                          idle_minutes=defaults['idle_minutes'], created=time.time(), mods=[], launch=None,
+                          idle_minutes=source['idle_minutes'] if source else defaults['idle_minutes'], created=time.time(), mods=[], launch=None,
                           eula=True, directory=self.directory_name(name, sid))
             from .domains import validate_address
             server['public_address'] = validate_address(self, {'label':data.get('address_label',''), 'port':data.get('external_port') or port}, sid, port)
@@ -195,7 +211,28 @@ class Manager(Features):
         from .domains import publish
         publish(self, sid)
         server = self.store.server(sid)
-        self.job(sid, 'installing', lambda: self.install(sid, mc, lv))
+        def provision():
+            if not source_id:
+                return self.install(sid, mc, lv)
+            import copy
+            with self.locks[source_id]:
+                template = self.idle(source_id)
+                self.install(sid, mc, lv)
+                require(template['minecraft'] == mc and template['loader_version'] == lv, 'Source runtime changed; recreate the server from its current settings')
+                folders = [name for name in ('config','mods','plugins','defaultconfigs') if (self.folder(source_id)/name).is_dir()]
+                require(self.properties(source_id).get('level-name','world') not in folders, 'World folders cannot be copied as configuration')
+                self.syncs.digest(self.folder(source_id), folders)
+                for folder in folders:
+                    shutil.copytree(self.folder(source_id)/folder, self.folder(sid)/folder, dirs_exist_ok=True)
+                target = self.store.server(sid)
+                target['mods'] = copy.deepcopy(template.get('mods', []))
+                self.store.save_server(target)
+                self.write_properties(target, {k:v for k,v in self.properties(source_id).items() if k not in PROTECTED_PROPERTIES})
+                if data.get('source_mode') == 'sync':
+                    target = self.store.server(sid)
+                    target['sync'] = dict(source_id=source_id, folders=folders, runtime=True, settings=True, status='Pending first sync')
+                    self.store.save_server(target)
+        self.job(sid, 'installing', provision)
         return self.public(server)
 
     def write_properties(self, server, values=None, root=None):

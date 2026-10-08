@@ -303,3 +303,21 @@ If UNM is unavailable, cleanup is saved locally and retried every five minutes w
 MMSM runs, including after restart. Keep the original UNM endpoint, zone and a valid
 integration token configured until cleanup completes. Archiving retains DNS records;
 port forwarding is managed separately in UNM.
+
+
+New-server defaults include a public port range. Leave the creation port blank to
+allocate an unused port, including checking other servers, internal listeners and
+MMSM's web port. Creation can copy a stopped server's properties, configuration
+folders, mods and runtime version once, or retain a one-way sync. Worlds, public
+addresses and ports remain independent; sync operates while both servers are stopped.
+
+Change your own username in Account settings using your current password. Case is
+preserved and sign-in remains case-insensitive. Read notifications disappear for
+that account without dismissing them for other users.
+
+For delegated UNM DNS, configure its HTTPS URL, a zone-scoped Integration key,
+delegated zone/base domain and public entry-point IP. SSH connection settings are
+no longer needed. Test connectivity after saving settings, then save a server's
+public address to verify token authorization and publishing. Each installation uses
+its own domain names and token. The server creation address uses its allocated
+public Minecraft port; alternative external mappings can be set in Public address.

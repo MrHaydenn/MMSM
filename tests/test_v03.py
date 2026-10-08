@@ -188,7 +188,7 @@ class ScopedHTTPTests(support.HTTPTests):
     def test_notification_read_is_per_account_and_unarchive_still_works(self):
         self.owner();s=server(self.store);self.store.notify(s['id'],'New release',kind='runtime')
         self.request('/api/notifications/read','POST',{})
-        self.assertEqual(self.request('/api/notifications')[1][0]['seen'],1)
+        self.assertEqual(self.request('/api/notifications')[1],[])
         self.request('/api/users','POST',{'username':'other','password':'correct-horse-battery','role':'admin'})
         self.sign_in('other');self.assertEqual(self.request('/api/notifications')[1][0]['seen'],0)
         self.assertEqual(self.request('/api/servers/'+s['id']+'/archive','POST',{})[0],200)

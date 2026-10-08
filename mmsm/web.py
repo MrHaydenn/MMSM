@@ -265,7 +265,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/logout' and method == 'POST':
             store.execute('DELETE FROM sessions WHERE token=?', (hashlib.sha256(token.encode()).hexdigest(),))
             self.reply({'ok': True}, headers={'Set-Cookie': self.session_cookie_header(expire=True,name=self.session_cookie)}); return
-        if path == '/api/password' and method == 'POST':
+        if path == '/api/username' and method == 'POST':
+            import re
+            name = data.get('username', '')
+            require(isinstance(name, str) and re.fullmatch(r'[a-zA-Z0-9_.-]{3,32}', name), 'Username must be 3–32 letters, numbers, dots, underscores or hyphens')
+            row = store.rows('SELECT password FROM users WHERE id=?', (self.user['id'],))[0]
+            require(password_matches(data.get('current', ''), row['password']), 'Current password is incorrect', 403)
+            require(not store.rows('SELECT id FROM users WHERE username=? AND id<>?', (name, self.user['id'])), 'Username is already taken', 409)
+            store.execute('UPDATE users SET username=? WHERE id=?', (name, self.user['id']))
+            self.reply({'saved': True}); return
+        if path == '/api/password'  and method == 'POST':
             self.rate_limit()
             row = store.rows('SELECT password FROM users WHERE id=?', (self.user['id'],))[0]
             require(password_matches(data.get('current', ''), row['password']), 'Current password is incorrect', 403)
@@ -322,14 +331,15 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(manager.unm_tunnel.status()); return
         if path == '/api/unm-connection/test' and method == 'POST':
             self.role('admin')
-            self.reply(manager.unm_tunnel.test()); return
+            from .domains import check_unm
+            self.reply(check_unm(store.settings())); return
         if path == '/api/settings':
             self.role('admin')
             if method == 'GET':
                 safe = store.settings(); safe['dns_token_saved'] = bool(safe.pop('dns_token', '')); safe['unm_token_saved'] = bool(safe.pop('unm_token', ''))
                 self.reply({**safe, 'unm_connection': manager.unm_tunnel.status(), 'running_web_port': self.server.server_port, 'running_bind_host': self.server.server_address[0], 'wrapper_update': manager.updater.status()}); return
             if method == 'PUT':
-                allowed = {'unm_tunnel_enabled','unm_ssh_host','unm_ssh_user','unm_ssh_port','unm_ssh_key','unm_local_port','dns_provider', 'unm_url', 'unm_token', 'update_channel', 'dns_auto', 'dns_zone_id', 'dns_token', 'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
+                allowed = {'default_port_min','default_port_max','unm_tunnel_enabled','unm_ssh_host','unm_ssh_user','unm_ssh_port','unm_ssh_key','unm_local_port','dns_provider', 'unm_url', 'unm_token', 'update_channel', 'dns_auto', 'dns_zone_id', 'dns_token', 'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
                 require(set(data) <= allowed, 'Unknown setting')
                 from .web_config import public_origin
                 if 'public_origin' in data:data['public_origin']=public_origin(data['public_origin'])
@@ -340,6 +350,8 @@ class Handler(BaseHTTPRequestHandler):
                 values = {**store.settings(), **data}
                 from .domains import validate_settings
                 from .unm_tunnel import validate as validate_tunnel
+                data['unm_tunnel_enabled'] = False
+                values['unm_tunnel_enabled'] = False
                 validate_tunnel(values)
                 if values.get('unm_tunnel_enabled'):
                     data['unm_url']='http://127.0.0.1:'+str(values['unm_local_port'])
@@ -355,8 +367,9 @@ class Handler(BaseHTTPRequestHandler):
                 require(type(values['wrapper_update_checks']) is bool,'Invalid update preference')
                 require(isinstance(values['update_feed'],str) and len(values['update_feed'])<=2048,'Invalid release feed')
                 if values['update_feed']:validate_url(values['update_feed'])
-                for key, lo, hi in [('web_port', 1024, 65535), ('default_memory_mb', 512, 262144), ('idle_minutes', 1, 1440), ('retention_days', 1, 365), ('update_interval_hours', 1, 168)]:
+                for key, lo, hi in [('default_port_min',1024,65535),('default_port_max',1024,65535),('web_port', 1024, 65535), ('default_memory_mb', 512, 262144), ('idle_minutes', 1, 1440), ('retention_days', 1, 365), ('update_interval_hours', 1, 168)]:
                     require(type(values[key]) is int and lo <= values[key] <= hi, f'Invalid {key}')
+                require(values.get('default_port_min',25565) <= values.get('default_port_max',25665), 'Port range minimum must not exceed maximum')
                 require(values['default_loader'] in LOADERS, 'Invalid default loader')
                 require(isinstance(values['default_sleep'], bool), 'Invalid sleep default')
                 require(isinstance(values['upstream_contact'], str) and len(values['upstream_contact']) <= 200 and '\n' not in values['upstream_contact'] and '\r' not in values['upstream_contact'], 'Invalid upstream contact')

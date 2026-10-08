@@ -346,7 +346,7 @@ test('sync and DNS tabs expose controls and escape names',()=>{
 
 test('domain input uses fixed readonly base and exposes opt-in Cloudflare settings',()=>{
  const h=harness();const html=h.run("domainFields('minecraft.example.com','address_label','trigon')");
- assert.match(html,/Server IP\/domain/);assert.match(html,/name="address_label"/);assert.match(html,/value="\.minecraft.example.com" readonly/);
+ assert.match(html,/Server IP\/domain/);assert.match(html,/name="address_label"/);assert.match(html,/domain-suffix/);assert.doesNotMatch(html,/placeholder="trigon"/);
  const settings=h.run("settingsPage({web_port:11015,running_web_port:11015,default_memory_mb:4096,dns_token_saved:true})");
  assert.match(settings,/name="dns_auto" type="checkbox" >/);assert.match(settings,/Token saved/);assert.match(settings,/name="dns_token" type="password" value=""/);
  const card=h.run('serverCard('+JSON.stringify({...sample,public_hostname:'trigon.minecraft.example.com'})+')');
@@ -390,10 +390,20 @@ test('UNM address panel renders the server A record and SRV target',()=>{
 
 test('UNM tunnel settings expose automatic maintenance and a saved-settings connection test',async()=>{
  const h=harness();const html=h.run("settingsPage({default_memory_mb:4096,dns_provider:'unm',unm_tunnel_enabled:true,unm_connection:{message:'Connected'}})");
- assert.match(html,/name="unm_tunnel_enabled" type="checkbox" checked/);
- assert.match(html,/name="unm_ssh_key"/);assert.match(html,/data-action="unm-test"/);
+ assert.doesNotMatch(html,/name="unm_tunnel_enabled"/);
+ assert.doesNotMatch(html,/name="unm_ssh_key"/);assert.match(html,/data-action="unm-test"/);
  h.elements.set('#unm-connection-status',{textContent:''});
  h.run("api=async(path)=>({message:'Connected to UNM through SSH'});");
  await h.handlers.get('click')({target:{closest:()=>({dataset:{action:'unm-test'}})}});
  assert.equal(h.elements.get('#unm-connection-status').textContent,'Connected to UNM through SSH');
+});
+
+
+test('new defaults and domain setup hide obsolete SSH fields',()=>{
+ const h=harness();const html=h.run("settingsPage({default_memory_mb:4096,default_port_min:25560,default_port_max:25569,dns_provider:'unm'})");
+ assert.match(html,/name="default_port_min"/);assert.match(html,/name="default_port_max"/);
+ assert.doesNotMatch(html,/SSH username|Private key path|Maintain the UNM SSH/);
+ const domain=h.run("domainFields('minecraft.example.com','address_label')");
+ assert.match(domain,/domain-suffix/);assert.doesNotMatch(domain,/readonly|placeholder="trigon"/);
+ h.run('accountSettingsModal()');assert.match(h.elements.get('#modal').innerHTML,/data-form="username"/);
 });

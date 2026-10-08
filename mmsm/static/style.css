@@ -32,3 +32,5 @@
 .domain-field{margin:16px 0}.domain-field>label{display:block;margin-bottom:8px}.domain-inputs{display:flex;gap:8px}.domain-inputs input:first-child{flex:1;min-width:80px}.domain-inputs input[readonly]{flex:2;min-width:0;color:var(--muted);cursor:default}.domain-field small{display:block;margin-top:8px}@media(max-width:600px){.domain-inputs{flex-direction:column}}
 
 .sidebar-bottom{display:flex;align-items:center;gap:8px;padding:16px 10px 0}.sidebar-bottom .localbadge{margin:0}.footer-settings{width:34px;height:34px;padding:7px;justify-content:center;flex-shrink:0}.footer-settings .icon{width:20px;height:20px}@media(max-width:760px){.sidebar-bottom{display:flex;margin-top:8px;padding:0 4px;gap:8px}.footer-settings{width:30px;height:30px;padding:5px}}
+
+.domain-suffix {display:flex;align-items:center;padding:0 .75rem;overflow-wrap:anywhere;color:var(--muted);}

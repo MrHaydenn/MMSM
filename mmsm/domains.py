@@ -213,3 +213,18 @@ def unm_request(settings, sid, body):
         raise ValueError('UNM DNS: '+message) from None
     except (urllib.error.URLError,ValueError):
         raise ValueError('Cannot contact UNM DNS. Check the URL, SSH tunnel, token and backend status.') from None
+
+
+def check_unm(settings):
+    import json
+    import urllib.request
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *args): return None
+    try:
+        url = unm_url(settings.get('unm_url', ''))
+        with urllib.request.build_opener(NoRedirect()).open(url + '/healthz', timeout=10) as response:
+            value = json.load(response)
+        require(value.get('ok') is True and value.get('mode') == 'live', 'UNM must be running in live mode')
+        return {'status': 'connected', 'message': 'UNM is reachable in live mode. Save a server address to verify the integration token and DNS publishing.'}
+    except Exception as error:
+        return {'status': 'error', 'message': 'UNM connection failed: ' + str(error)}

@@ -326,3 +326,20 @@ test('sign out closes account dialog and clears UI session even if already expir
  h.run("user={id:'u',role:'owner'};csrf='old';api=async()=>{const e=new Error('Please sign in');e.status=401;throw e}");
  await h.run("perform('logout','',{})");assert.equal(h.run('user'),null);assert.match(h.elements.get('#app').innerHTML,/Sign in/);
 });
+
+test('port override retries only after explicit confirmation',async()=>{
+ const h=harness();h.context.confirm=()=>true;const calls=[];
+ h.context.fetch=async(url,options)=>{calls.push(JSON.parse(options.body));return calls.length===1?{ok:false,status:409,json:async()=>({error:'PORT_CONFLICT: Create anyway?'})}:{ok:true,status:201,json:async()=>({id:'new'})};};
+ await h.run("api('/servers','POST',{port:25565})");assert.equal(calls.length,2);assert.equal(calls[1].allow_port_conflict,true);
+});
+test('sync edit confirmation retries with explicit unlink header and cancel sends no retry',async()=>{
+ const h=harness();let calls=[];h.context.confirm=()=>true;
+ h.context.fetch=async(url,options)=>{calls.push(options);return calls.length===1?{ok:false,status:409,json:async()=>({error:'SYNC_CONFLICT: Disconnect?'})}:{ok:true,status:200,json:async()=>({saved:true})};};
+ await h.run("api('/servers/s1/files','PUT',{path:'config/a',content:'new'})");assert.equal(calls[1].headers['X-MMSM-Unlink-Sync'],'true');
+ calls=[];h.context.confirm=()=>false;await assert.rejects(h.run("api('/servers/s1/files','PUT',{})"));assert.equal(calls.length,1);
+});
+test('sync and DNS tabs expose controls and escape names',()=>{
+ const h=harness();h.context.sample=sample;assert.match(h.run('serverHeader(sample)'),/data-tab="syncs"/);assert.match(h.run('serverHeader(sample)'),/data-tab="address"/);
+ const html=h.run("syncPanel({sources:[{id:'s',name:'<source>',loader:'fabric',minecraft:'1.2',folders:['config']}],rule:null})");assert.match(html,/&lt;source&gt;/);assert.match(html,/name="runtime"/);assert.match(html,/name="folders"/);
+ const address=h.run("addressPanel({configured:false,value:{},records:[]},sample)");assert.match(address,/Configure your DNS zone/);assert.match(address,/does not|not published DNS/);
+});

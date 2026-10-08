@@ -1,3 +1,15 @@
+# Verification record — MMSM 0.8.0
+
+121 Python tests and 47 JavaScript behavior tests passed locally, zero skips. Python compilation and JavaScript syntax checks passed.
+
+New coverage: duplicate public-port creation with explicit override, rejection of backend-port conflicts, real socket listener handoff and refusal while another server is active; one-way folder replacement/deletions, backup retention, manual unlink guards, out-of-band destination edits, running/archived pauses, symlinks and protected paths, chained rules and loader mismatch, mocked runtime-provider handoff and mod registry/disabled JAR propagation, failed copies preserving destination files; HTTP edit-confirmation and scoped-source permissions; fresh-install release feed; generated DNS records and hostname validation; UI confirmation/retry/cancel behavior and escaped sync/address controls.
+
+Limits: live Minecraft distributions were not booted for these features, and runtime sync provider installation is mocked in its focused test. Existing loader and process tests remain in the suite. Browser tests use the minimal DOM harness, not visual rendering. DNS generation makes no external changes; no Cloudflare account, authoritative DNS propagation, router forwarding or Windows-host networking was tested. Automatic sync waits for both servers to stop. Runtime installation commits separately from folder replacement and keeps its existing runtime backup if a later folder operation fails.
+
+This version is committed for review; release-request.json remains at the previously approved version until the owner approves publication.
+
+---
+
 # Verification record — MMSM 0.7.4
 
 113 Python tests and 44 JavaScript behavior tests passed locally, with zero skips. Python compilation and JavaScript syntax checks passed.

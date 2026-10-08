@@ -40,7 +40,7 @@ HTTP 127.0.0.1 POST /api/login
 HTTP 127.0.0.1 GET /api/dashboard
 HTTP 127.0.0.1 GET /api/users
 HTTP 127.0.0.1 POST /api/servers
-HTTP 127.0.0.1 DELETE /api/users/7f32d503dc66b985f87ecf54
+HTTP 127.0.0.1 DELETE /api/users/421c0cdef4e1e8e72e5d5cbc
 HTTP 127.0.0.1 GET /api/dashboard
 ok
 test_failed_installer_log_is_preserved (test_manager.JavaProviderTests.test_failed_installer_log_is_preserved) ... ok
@@ -117,8 +117,8 @@ test_scheduler_checks_due_servers_only_and_failure_backs_off (test_v02.UpdateTes
 ok
 test_update_notice_only_targets_current_minecraft_and_loader (test_v02.UpdateTests.test_update_notice_only_targets_current_minecraft_and_loader) ... ok
 test_live_backup_saves_world_and_resumes_then_restart_replaces_process (test_v03.JVMBackupTests.test_live_backup_saves_world_and_resumes_then_restart_replaces_process) ... ok
-test_dependencies_use_project_local_target_and_fail_gracefully (test_v03.PlayerAndImageTests.test_dependencies_use_project_local_target_and_fail_gracefully) ... MMSM: installing missing telemetry/image dependencies into /tmp/tmp7xksr3t2/dependencies
-MMSM: installing missing telemetry/image dependencies into /tmp/tmp7xksr3t2/dependencies
+test_dependencies_use_project_local_target_and_fail_gracefully (test_v03.PlayerAndImageTests.test_dependencies_use_project_local_target_and_fail_gracefully) ... MMSM: installing missing telemetry/image dependencies into /tmp/tmp0e_nxx3c/dependencies
+MMSM: installing missing telemetry/image dependencies into /tmp/tmp0e_nxx3c/dependencies
 MMSM dependency setup could not finish: Command 'pip' timed out after 180 seconds 
 MMSM will continue. Check internet/pip and restart to retry.
 ok
@@ -261,8 +261,8 @@ ok
 test_vanilla_creation_and_install_routes (test_v06.HTTPChanges.test_vanilla_creation_and_install_routes) ... HTTP 127.0.0.1 POST /api/setup
 HTTP 127.0.0.1 POST /api/login
 HTTP 127.0.0.1 POST /api/servers
-HTTP 127.0.0.1 POST /api/servers/71dbce0b14678bc339324d87/mods-install
-HTTP 127.0.0.1 POST /api/servers/71dbce0b14678bc339324d87/project-install
+HTTP 127.0.0.1 POST /api/servers/3ea969e2fdb9058b6671ffb5/mods-install
+HTTP 127.0.0.1 POST /api/servers/3ea969e2fdb9058b6671ffb5/project-install
 ok
 test_normal_entrypoint_updates_reexecutes_and_preserves_account (test_v06.RestartIntegration.test_normal_entrypoint_updates_reexecutes_and_preserves_account) ... ok
 test_apply_preserves_worlds_data_and_keeps_program_backup (test_v06.Updates.test_apply_preserves_worlds_data_and_keeps_program_backup) ... ok
@@ -363,8 +363,24 @@ HTTP 127.0.0.1 GET /api/me
 ok
 test_blank_migration_custom_feed_and_opt_out (test_v074.GitHubUpdates.test_blank_migration_custom_feed_and_opt_out) ... ok
 test_default_github_feed_and_notification (test_v074.GitHubUpdates.test_default_github_feed_and_notification) ... ok
+test_domain_records_and_new_install_feed (test_v080.PortsAndDomains.test_domain_records_and_new_install_feed) ... ok
+test_duplicate_override_and_listener_claim (test_v080.PortsAndDomains.test_duplicate_override_and_listener_claim) ... ok
+test_edit_confirmation_and_scoped_source_access (test_v080.SyncHTTP.test_edit_confirmation_and_scoped_source_access) ... HTTP 127.0.0.1 POST /api/setup
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 PUT /api/servers/target/syncs
+HTTP 127.0.0.1 PUT /api/servers/target/properties
+HTTP 127.0.0.1 PUT /api/servers/target/properties
+HTTP 127.0.0.1 POST /api/login
+HTTP 127.0.0.1 GET /api/servers/target/syncs
+HTTP 127.0.0.1 PUT /api/servers/target/syncs
+ok
+test_copy_failure_preserves_destination (test_v080.SyncTests.test_copy_failure_preserves_destination) ... ok
+test_external_edits_pause_and_running_archived_sources_are_dormant (test_v080.SyncTests.test_external_edits_pause_and_running_archived_sources_are_dormant) ... ok
+test_mirror_updates_deletes_backup_and_manual_unlink (test_v080.SyncTests.test_mirror_updates_deletes_backup_and_manual_unlink) ... ok
+test_runtime_and_mod_registry_follow_source (test_v080.SyncTests.test_runtime_and_mod_registry_follow_source) ... ok
+test_symlinks_worlds_chains_and_loader_mismatch_blocked (test_v080.SyncTests.test_symlinks_worlds_chains_and_loader_mismatch_blocked) ... ok
 
 ----------------------------------------------------------------------
-Ran 113 tests in 28.515s
+Ran 121 tests in 32.960s
 
 OK

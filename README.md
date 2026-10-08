@@ -2,7 +2,7 @@
 
 **MrHaydenn’s Minecraft Server Manager** — a self-hosted Minecraft Java server wrapper with a WebGUI, Modrinth integration, managed Java, and wake-on-ping.
 
-This is a working **0.7.4 preview**, with source and integration tests. The backend has been exercised locally, including a real JVM protocol fixture. The Modrinth fix was checked against the live API and a real Fabric API JAR was downloaded, checksum-verified and installed into a temporary test server folder. A real Minecraft distribution was not booted for this release. Browser layout remains unverified in this environment. See [VERIFICATION.md](docs/VERIFICATION.md) for the exact test boundary.
+This is a working **0.8.0 preview**, with source and integration tests. The backend has been exercised locally, including a real JVM protocol fixture. The Modrinth fix was checked against the live API and a real Fabric API JAR was downloaded, checksum-verified and installed into a temporary test server folder. A real Minecraft distribution was not booted for this release. Browser layout remains unverified in this environment. See [VERIFICATION.md](docs/VERIFICATION.md) for the exact test boundary.
 
 ## Upgrade from earlier versions
 
@@ -20,7 +20,18 @@ Startup installs missing `psutil` and Pillow into `dependencies/` using this Pyt
 
 **Automatic EULA acceptance now defaults ON** for fresh/unset settings, as requested. An explicitly saved choice is preserved on upgrade; change it in Settings if needed. Port 11015 remains the fresh-install default.
 
-## New in 0.7.4
+## New in 0.8.0 (awaiting release approval)
+
+- Server creation can override a duplicate public Minecraft port after a warning. Internal backend and WebGUI ports cannot be overridden. Only one server can own a shared listener: stop its current owner (including sleeping servers) before starting another.
+- Server > Syncs configures a one-way mirror from another non-archived, same-loader server. Select top-level folders such as config, mods, plugins or defaultconfigs; optionally follow Minecraft/loader versions. Checks run every 30 seconds and changes wait until both servers are stopped. Sources may have multiple destinations; chained/cyclic syncs are blocked. Sources must be visible to the configuring account.
+- Manual file/mod/runtime/config changes through the WebGUI warn and disconnect the destination sync only after confirmation. Edits outside MMSM pause the sync rather than being silently overwritten. Unlink and recreate it to accept replacement. One previous folder copy is retained in data/sync-backups/<server-id>; runtime updates retain the existing full runtime backup. A successful runtime update can remain applied if a subsequent folder copy fails; the sync pauses and retains its runtime backup.
+- Sync includes deletions and disabled JAR state/mod metadata. Worlds, managed runtime folders and symlinks cannot be selected. Each snapshot is limited to 30,000 files / 2 GB. It is not a live world-replication or two-way merge system.
+- Wrapper Settings > Minecraft domains stores the DNS zone, base subdomain and public entry-point IP. Server > Public address assigns a unique label and external TCP port and generates exact A/AAAA, CNAME and Minecraft Java SRV instructions. For example, trigon + minecraft.mrhaydenn.us becomes trigon.minecraft.mrhaydenn.us. Records must be added at your DNS provider; MMSM does not change Cloudflare, router forwarding or firewall rules. DNS-only/grey-cloud is required for ordinary Minecraft TCP. Different hostnames do not multiplex two servers on one IP/port; use distinct forwarded ports or a Minecraft-aware proxy.
+- The official GitHub release feed remains the default for fresh installations; custom feeds and background-check opt-outs are preserved.
+
+DNS reference: https://developers.cloudflare.com/dns/manage-dns-records/reference/dns-record-types/ and https://developers.cloudflare.com/dns/proxy-status/limitations/
+
+## Earlier changes from 0.7.4
 
 MMSM now checks the official GitHub release feed by default:
 `https://github.com/MrHaydenn/MMSM/releases/latest/download/latest.json`

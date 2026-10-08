@@ -66,7 +66,7 @@ class Providers:
         contact = self.store.settings()['upstream_contact']
         if urllib.parse.urlparse(url).hostname == 'fill.papermc.io':
             require(contact, 'Set your contact URL or email in Settings before using the Paper download API')
-        agent = 'MMSM/0.7.4' + (' (' + contact + ')' if contact else '')
+        agent = 'MMSM/0.8.0' + (' (' + contact + ')' if contact else '')
         return self.opener.open(urllib.request.Request(url, headers={'User-Agent': agent, 'Accept': 'application/json'}), timeout=45)
 
     def get(self, url, raw=False):

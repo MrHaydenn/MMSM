@@ -1,16 +1,8 @@
-# MMSM 0.7.4
+# MMSM 0.8.0 — prepared for release approval
 
-- Official GitHub releases are now the default update source.
-- Older blank update feeds migrate once. Custom feeds and disabled background checks are preserved.
-- Existing update notifications, six-hour checks, checksum verification and one-click installation now work with the official GitHub release assets.
-- Includes the 0.7.3 parent-domain cookie fix for login, settings, password changes and sign-out.
+- Duplicate public-port override with a warning and exclusive listener ownership.
+- One-way server folder and loader-version syncs, backups, and confirmation before manual edits disconnect a sync.
+- Public Minecraft address management with Cloudflare-compatible DNS record instructions.
+- Official GitHub update feed enabled by default for fresh installations.
 
-## Update from 0.7.3
-
-In Settings, set Release feed URL to:
-
-https://github.com/MrHaydenn/MMSM/releases/latest/download/latest.json
-
-Save, click Check for updates, stop Minecraft servers and wait for operations to finish, then click Update MMSM. The manager restarts while preserving accounts, settings and worlds.
-
-For a fresh/manual install, download MMSM-0.7.4.zip. The -update.zip is for the built-in updater.
+Sync changes wait for both servers to stop. Domain records require manual DNS setup and appropriate TCP forwarding. See README for limits and recovery details.

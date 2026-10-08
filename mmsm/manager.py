@@ -41,12 +41,15 @@ class Manager(Features):
         from .updater import Updater
         self.updater = Updater(self)
         self.initialize_features()
+        from .syncs import Syncs
+        self.syncs = Syncs(self)
         if start_background:
             for s in store.servers(False):
                 try:
                     self.ensure_proxy(s)
                 except OSError as e:
                     self.set_state(s['id'], status='error', error='Public port unavailable: ' + str(e))
+            threading.Thread(target=self.syncs.loop, daemon=True).start()
             threading.Thread(target=self.monitor, daemon=True).start()
             threading.Thread(target=self.update_loop, daemon=True).start()
             threading.Thread(target=self.schedule_loop, daemon=True).start()
@@ -85,11 +88,26 @@ class Manager(Features):
         return proc is not None and proc.poll() is None
 
     def public(self, s):
-        return {**s, **self.state(s['id']), 'metrics': self.latest['servers'].get(s['id'], {}), 'icon': (self.folder(s['id']) / 'server-icon.png').is_file()}
+        from .domains import plan
+        address = plan(self.store.settings(), s) if s.get('public_address', {}).get('label') else {}
+        return {**s, **self.state(s['id']), 'port_shared': sum(x['port'] == s['port'] for x in self.store.servers()) > 1, 'public_hostname': address.get('hostname'), 'metrics': self.latest['servers'].get(s['id'], {}), 'icon': (self.folder(s['id']) / 'server-icon.png').is_file()}
 
-    def ensure_proxy(self, server):
-        if server['id'] not in self.proxies:
-            self.proxies[server['id']] = Proxy(self, server['id'], server['port'], self.proxy_host)
+    def ensure_proxy(self, server, claim=False):
+        with self.lock:
+            for other_id, proxy in list(self.proxies.items()):
+                if other_id == server['id']: continue
+                other = self.store.server(other_id)
+                if other['port'] != server['port']: continue
+                if not claim: return
+                require(not self.alive(other_id) and self.state(other_id)['status'] not in
+                        ('starting', 'stopping', 'killing', 'restarting') and
+                        not (other.get('sleep') and not other.get('manual_stop')),
+                        'Public port is held by another running or sleeping server. Stop it first.', 409)
+                proxy.close(); del self.proxies[other_id]
+            if server['id'] not in self.proxies:
+                self.proxies[server['id']] = Proxy(self, server['id'], server['port'], self.proxy_host)
+            if claim:
+                self.set_state(server['id'], status='starting')
 
     def spawn_job(self, fn):
         def run():
@@ -137,7 +155,10 @@ class Manager(Features):
         with self.lock:
             reserved = {p for s in self.store.servers() for p in (s['port'], s['internal_port'])}
             reserved.add(self.store.settings()['web_port'])
-            require(port not in reserved, 'Port is already assigned', 409)
+            conflicts = [s for s in self.store.servers() if s['port'] == port]
+            require(port != defaults['web_port'] and all(s['internal_port'] != port for s in self.store.servers()), 'Port is reserved for MMSM or an internal server connection', 409)
+            require(not conflicts or data.get('allow_port_conflict') is True,
+                    'PORT_CONFLICT: Port is already assigned. Create anyway? Only one server can use this port at a time.', 409)
             internal = None
             for candidate in range(30000, 60000):
                 if candidate in reserved or candidate == port:
@@ -284,7 +305,7 @@ class Manager(Features):
             if automatic: require(not self.stop_requests[sid].is_set(), 'Start cancelled by Stop',409)
             else: self.stop_requests[sid].clear()
             require(s.get('launch'), 'Install the server successfully before starting', 409)
-            self.ensure_proxy(s)
+            self.ensure_proxy(s, claim=True)
             self.write_properties(s)
             launch = s['launch']
             args = [launch['java'], '-Xms512M', f'-Xmx{s["memory_mb"]}M', *launch['args']]
@@ -385,7 +406,7 @@ class Manager(Features):
                 if idle_token is None: self.stop_requests[sid].clear()
                 require(s['sleep'], 'Enable and save sleep settings first', 409)
                 require(s.get('launch'), 'Install the server before putting it to sleep', 409)
-                self.ensure_proxy(s)
+                self.ensure_proxy(s, claim=True)
             if not internal:
                 s['manual_stop'] = not sleeping
                 s['crash_active'] = False
@@ -981,6 +1002,9 @@ class Manager(Features):
 
     def close(self):
         self.closing.set()
+        # Wait for a folder transaction before shutting down its store/listeners.
+        with self.syncs.lock:
+            pass
         failures = []
         for s in self.store.servers(False):
             if self.alive(s['id']):

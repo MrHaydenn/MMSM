@@ -171,6 +171,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.authenticate()
                     self.role('admin')
                     enforce_scope(self)
+                    self.server.manager.syncs.guard(self.parts[2], self.headers.get("X-MMSM-Unlink-Sync") == "true")
                     require(self.headers.get('Content-Length') is not None, 'Content-Length is required', 411)
                     require(self.headers.get('Content-Type', '').split(';')[0] == 'application/octet-stream', 'Use application/octet-stream for uploads', 415)
                     result = (self.server.manager.upload_mod(self.parts[2],self.query.get('name',''),self.rfile,length) if self.parts[3]=='mods-upload' else self.server.manager.upload_file(self.parts[2], self.query.get('path', ''), self.rfile, length))
@@ -247,6 +248,9 @@ class Handler(BaseHTTPRequestHandler):
         self.authenticate()
         enforce_scope(self)
         require(method=='GET' or not manager.updater.installing, 'MMSM update in progress',409)
+        if len(self.parts) == 4 and self.parts[:2] == ['api', 'servers'] and method != 'GET' and self.parts[3] in ('files', 'mods-install', 'mods-toggle', 'pack-install', 'project-install', 'configure', 'update', 'properties', 'sync-edit'):
+            self.role('admin')
+            manager.syncs.guard(self.parts[2], self.headers.get('X-MMSM-Unlink-Sync') == 'true')
         if extra_route(self):
             if method != 'GET': store.audit(self.user['username'], method + ' ' + path)
             return
@@ -313,11 +317,13 @@ class Handler(BaseHTTPRequestHandler):
             if method == 'GET':
                 self.reply({**store.settings(), 'running_web_port': self.server.server_port, 'running_bind_host': self.server.server_address[0], 'wrapper_update': manager.updater.status()}); return
             if method == 'PUT':
-                allowed = {'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
+                allowed = {'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
                 require(set(data) <= allowed, 'Unknown setting')
                 from .web_config import public_origin
                 if 'public_origin' in data:data['public_origin']=public_origin(data['public_origin'])
                 values = {**store.settings(), **data}
+                from .domains import validate_settings
+                validate_settings(values)
                 require(values['bind_host'] in ('0.0.0.0','127.0.0.1'),'Choose all interfaces or localhost')
                 import re
                 require(type(values['auto_eula']) is bool, 'Invalid EULA preference')

@@ -49,6 +49,28 @@ def notification_rows(h):
 
 def extra_route(h):
     manager=h.server.manager;store=manager.store;path=h.url.path;method=h.command;data=h.data
+    if len(h.parts)==4 and h.parts[:2]==['api','servers'] and h.parts[3] in ('syncs','sync-edit','sync-now','address'):
+        h.role('admin'); sid, action=h.parts[2:]; server=manager.active(sid)
+        if action=='address':
+            from .domains import plan, save
+            if method=='GET': h.reply(plan(store.settings(),server))
+            elif method=='PUT': h.reply(save(manager,sid,data))
+            else: return False
+        elif action=='sync-edit' and method=='POST': h.reply({'ready':True})
+        elif action=='syncs' and method=='GET':
+            sources=[{'id':s['id'],'name':s['name'],'loader':s['loader'],'minecraft':s['minecraft'],'folders':[p.name for p in manager.folder(s['id']).iterdir() if p.is_dir() and not p.is_symlink()]} for s in store.servers(False) if s['id']!=sid and can_see(h,s['id']) and not s.get('sync')]
+            rule=server.get('sync')
+            if rule and not can_see(h,rule['source_id']): rule={'status':'Source is outside your account access'}
+            h.reply({'rule':rule,'sources':sources})
+        elif action=='syncs' and method=='PUT':
+            if data.get('source_id'): require(can_see(h,data['source_id']),'Source server not found',404)
+            h.reply(manager.syncs.save(sid,data))
+        elif action=='sync-now' and method=='POST':
+            require(can_see(h,server.get('sync',{}).get('source_id')),'Source server not found',404)
+            h.reply(manager.syncs.run(sid))
+        else: return False
+        store.audit(h.user['username'],method+' '+action+' '+sid) if method!='GET' else None
+        return True
     if path.startswith('/api/wrapper-update/'):
         h.role('admin');require(scope(h) is None,'Global administrator required',403)
         if path=='/api/wrapper-update/check' and method=='POST':h.reply(manager.updater.check());return True

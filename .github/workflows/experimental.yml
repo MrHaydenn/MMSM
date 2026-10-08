@@ -1,0 +1,60 @@
+name: Publish experimental build
+on:
+  push:
+    branches: [main, experimental]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mmsm-experimental
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.repository == 'MrHaydenn/MMSM' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/experimental')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify build
+        run: |
+          python -m pip install psutil Pillow
+          python -m unittest discover -s tests -v
+          node --test tests/ui.test.cjs
+          python -m compileall -q mmsm
+          node --check mmsm/static/app.js
+      - name: Package commit
+        run: |
+          python tools/build_release.py --channel experimental --revision "$GITHUB_SHA" --archive-name "MMSM-experimental-${GITHUB_SHA}.zip" --url "https://github.com/MrHaydenn/MMSM/releases/download/experimental/MMSM-experimental-${GITHUB_SHA}.zip"
+      - name: Publish experimental feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view experimental >/dev/null 2>&1; then
+            gh release create experimental --target "$GITHUB_SHA" --title "MMSM experimental builds" --notes "Latest verified push from main or experimental. This prerelease is separate from Stable releases." --prerelease --latest=false
+          fi
+          gh release upload experimental "release/MMSM-experimental-${GITHUB_SHA}.zip" --clobber
+          gh release upload experimental release/latest.json --clobber
+          gh release edit experimental --prerelease --latest=false
+          python - <<'PY'
+          import json, subprocess
+          assets = json.loads(subprocess.check_output(['gh','api','repos/MrHaydenn/MMSM/releases/tags/experimental']))['assets']
+          builds = sorted((a for a in assets if a['name'].startswith('MMSM-experimental-') and a['name'].endswith('.zip')), key=lambda a:a['updated_at'], reverse=True)
+          for asset in builds[3:]:
+              subprocess.run(['gh','api','--method','DELETE',f"repos/MrHaydenn/MMSM/releases/assets/{asset['id']}"],check=True)
+          PY
+      - name: Verify published experimental update
+        run: python tools/verify_update.py --channel experimental --expected-revision "$GITHUB_SHA"

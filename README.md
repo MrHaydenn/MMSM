@@ -2,7 +2,7 @@
 
 **MrHaydenn’s Minecraft Server Manager** — a self-hosted Minecraft Java server wrapper with a WebGUI, Modrinth integration, managed Java, and wake-on-ping.
 
-This is a working **0.8.0 preview**, with source and integration tests. The backend has been exercised locally, including a real JVM protocol fixture. The Modrinth fix was checked against the live API and a real Fabric API JAR was downloaded, checksum-verified and installed into a temporary test server folder. A real Minecraft distribution was not booted for this release. Browser layout remains unverified in this environment. See [VERIFICATION.md](docs/VERIFICATION.md) for the exact test boundary.
+This is a working **0.8.1 release**, with source and integration tests. The backend has been exercised locally, including a real JVM protocol fixture. The Modrinth fix was checked against the live API and a real Fabric API JAR was downloaded, checksum-verified and installed into a temporary test server folder. A real Minecraft distribution was not booted for this release. Browser layout remains unverified in this environment. See [VERIFICATION.md](docs/VERIFICATION.md) for the exact test boundary.
 
 ## Upgrade from earlier versions
 
@@ -284,3 +284,11 @@ In wrapper Settings, configure the DNS zone, base domain and public entry-point 
 New-server creation shows an editable subdomain before the fixed base domain. Edit existing addresses in the server Public address tab; the full hostname also appears on server headers and dashboard cards. Saving an address publishes its A/AAAA, CNAME and Java SRV records. MMSM retries every five minutes and shows publication status. Existing DNS records are not adopted or overwritten: remove conflicting records manually if you want MMSM to own those names. Renaming/clearing an address removes owned CNAME/SRV records; shared base records remain. Turning automation off, archiving or deleting a server leaves its DNS records in place. Clear its address before deletion if you want automatic record removal. IP changes require editing the public entry-point IP setting; this is not IP discovery or a tunnel.
 
 No NS delegation is needed for Cloudflare API mode. Hosting an authoritative DNS service with delegated NS records is a separate deployment requiring public DNS reachability on TCP/UDP 53. DNS names do not replace Minecraft TCP port forwarding; each separate server needs a distinct external port unless a Minecraft-aware proxy routes connections.
+
+### Update channels
+
+Stable (the default) follows published releases. Experimental follows the latest verified push on main or the experimental branch, through a separate prerelease build feed. Choose a channel in wrapper Settings, save, then Check for updates. New pushes with the same version number are detected using their commit ID. Installing stays manual and requires stopped Minecraft servers. Switching back to Stable offers the latest stable package, including when returning from a newer experimental version. Custom stable feeds remain supported. Experimental uses the official feed. The newest three experimental ZIPs are retained.
+
+Ordinary pushes publish experimental builds after tests pass, and never publish stable releases. Stable publication requires explicit owner authorization and a changed release-request.json matching the program version. For this 0.8.1 release, the owner explicitly requested publication; future pushes must not change that release marker unless the owner requests another release.
+
+The browser tab icon uses the saved launcher image, with the top-left cube as default. Uploading a new logo refreshes it immediately in that browser; other signed-in tabs refresh branding within 30 seconds.

@@ -94,7 +94,8 @@ def extra_route(h):
     if len(h.parts)==4 and h.parts[:2]==['api','servers'] and h.parts[3]=='project-install' and method=='POST':
         h.role('admin');h.reply(manager.install_project(h.parts[2],data));return True
     if path=='/api/appearance' and method=='GET':
-        h.reply({'theme':store.settings().get('theme','forest'),'logo':(store.root/'images'/'logo.png').is_file()});return True
+        file=store.root/'images'/'logo.png'
+        h.reply({'theme':store.settings().get('theme','forest'),'logo':file.is_file(),'logo_revision':str(file.stat().st_mtime_ns) if file.is_file() else 'default'});return True
     if path=='/api/profile' and method=='POST':
         png=image_bytes(__import__('base64').b64decode(data['image'],validate=True),128) if data.get('image') else minecraft_head(manager,data.get('minecraft_name',''))
         atomic_write(store.root/'images'/'avatars'/(h.user['id']+'.png'),png)

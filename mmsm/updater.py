@@ -14,8 +14,8 @@ import time
 import urllib.parse
 import urllib.request
 import zipfile
-from . import __version__
-from .store import require, atomic_write, confined
+from . import __version__, __revision__, __build_channel__
+from .store import require, atomic_write, confined, GITHUB_EXPERIMENTAL_FEED
 
 LIMIT = 32 * 1024 * 1024
 
@@ -45,7 +45,7 @@ class Redirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req,fp,code,msg,headers,newurl)
 
 def fetch(url,limit):
-    request=urllib.request.Request(public_url(url),headers={'User-Agent':'MMSM/'+__version__})
+    request=urllib.request.Request(public_url(url),headers={'User-Agent':'MMSM/'+__version__,'Cache-Control':'no-cache'})
     with urllib.request.build_opener(Redirects()).open(request,timeout=20) as response:
         raw=response.read(limit+1)
     require(len(raw)<=limit,'Release download exceeds size limit')
@@ -106,24 +106,31 @@ class Updater:
         self.shutdown=None
 
     def status(self):
-        return dict(self.state,current=__version__)
+        return dict(self.state,current=__version__,current_revision=__revision__,current_build_channel=__build_channel__,channel=self.store.settings().get('update_channel','stable'))
 
     def check(self):
         with self.lock:
             require(not self.installing,'An update is already installing',409)
-            feed=self.store.settings()['update_feed'];self.last_check=time.time()
+            settings=self.store.settings(); channel=settings.get('update_channel','stable')
+            feed=GITHUB_EXPERIMENTAL_FEED if channel=='experimental' else settings['update_feed'];self.last_check=time.time()
             self.manifest=None;self.feed=feed
             if not feed:
                 self.state={'status':'unconfigured'};return self.status()
             try:
                 data=json.loads(fetch(feed,256*1024))
                 require(isinstance(data,dict),'Invalid release manifest')
-                newer=version(data.get('version'))>version(__version__)
+                candidate=version(data.get('version'))
+                if channel=='experimental':
+                    require(data.get('channel')=='experimental' and isinstance(data.get('revision'),str) and re.fullmatch(r'[0-9a-f]{40}',data['revision']), 'Invalid experimental build manifest')
+                    newer=data['revision']!=__revision__ or __build_channel__!='experimental'
+                else:
+                    require(data.get('channel','stable')=='stable','Stable feed must contain a stable build')
+                    newer=candidate>version(__version__) or __build_channel__=='experimental'
                 validate_url(data.get('url',''))
                 require(isinstance(data.get('sha256'),str) and re.fullmatch(r'[0-9a-f]{64}',data['sha256']),'Invalid release SHA-256')
                 self.manifest=data
-                self.state={'status':'available' if newer else 'current','latest':data['version'],'checked':time.time()}
-                if newer:self.store.notify(None,'MMSM '+data['version']+' is available. Open Settings to update.','wrapper:'+data['version'],'wrapper',{'tab':'settings'})
+                self.state={'status':'available' if newer else 'current','latest':data['version'],'revision':data.get('revision'),'checked':time.time()}
+                if newer:self.store.notify(None,'MMSM '+data['version']+(' experimental '+data['revision'][:7] if channel=='experimental' else '')+' is available. Open Settings to update.','wrapper:'+channel+':'+data.get('revision',data['version']),'wrapper',{'tab':'settings'})
             except Exception as e:
                 self.state={'status':'failed','error':str(e),'checked':time.time()}
             return self.status()
@@ -159,6 +166,10 @@ class Updater:
             module=ast.parse((stage/'mmsm/__init__.py').read_text())
             declared=[n.value.value for n in module.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='__version__' for t in n.targets) and isinstance(n.value,ast.Constant)]
             require(declared==[data['version']],'Package version does not match release manifest')
+            declarations={t.id:n.value.value for n in module.body if isinstance(n,ast.Assign) and isinstance(n.value,ast.Constant) for t in n.targets if isinstance(t,ast.Name)}
+            if data.get('revision'):
+                require(declarations.get('__revision__')==data['revision'],'Package revision does not match manifest')
+                require(declarations.get('__build_channel__')==data.get('channel','stable'),'Package channel does not match manifest')
             atomic_write(self.work/'files.json',json.dumps(names))
         except Exception:
             shutil.rmtree(stage,ignore_errors=True);raise

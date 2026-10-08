@@ -56,7 +56,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.number }}
         run: |
-          python tools/build_release.py --url "https://github.com/MrHaydenn/MMSM/releases/download/v${VERSION}/MMSM-${VERSION}-update.zip"
+          python tools/build_release.py --revision "$GITHUB_SHA" --url "https://github.com/MrHaydenn/MMSM/releases/download/v${VERSION}/MMSM-${VERSION}-update.zip"
           git archive --format=zip --prefix=mmsm/ --output="release/MMSM-${VERSION}.zip" HEAD
       - name: Publish complete release
         env:
@@ -65,3 +65,5 @@ jobs:
         run: |
           gh release create "v${VERSION}" "release/MMSM-${VERSION}-update.zip" "release/MMSM-${VERSION}.zip" release/latest.json --target "$GITHUB_SHA" --title "MMSM ${VERSION}" --notes-file RELEASE_NOTES.md --draft
           gh release edit "v${VERSION}" --draft=false --latest
+      - name: Verify published stable update
+        run: python tools/verify_update.py --channel stable --expected-revision "$GITHUB_SHA"

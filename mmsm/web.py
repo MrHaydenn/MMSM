@@ -220,6 +220,11 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self):
         manager, store = self.server.manager, self.server.manager.store
         path, method, data = self.url.path, self.command, self.data
+        if path in ('/favicon.svg','/favicon.ico') and method == 'GET':
+            file=store.root/'images'/'logo.png'
+            if file.is_file():self.reply(file.read_bytes(),content_type='image/png')
+            else:self.reply((Path(__file__).parent/'static'/'favicon.svg').read_bytes(),content_type='image/svg+xml')
+            return
         if path == '/theme.css' and method == 'GET':
             from .themes import css
             self.reply(css(store.settings()['theme']).encode(),content_type='text/css'); return
@@ -318,7 +323,7 @@ class Handler(BaseHTTPRequestHandler):
                 safe = store.settings(); safe['dns_token_saved'] = bool(safe.pop('dns_token', ''))
                 self.reply({**safe, 'running_web_port': self.server.server_port, 'running_bind_host': self.server.server_address[0], 'wrapper_update': manager.updater.status()}); return
             if method == 'PUT':
-                allowed = {'dns_auto', 'dns_zone_id', 'dns_token', 'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
+                allowed = {'update_channel', 'dns_auto', 'dns_zone_id', 'dns_token', 'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
                 require(set(data) <= allowed, 'Unknown setting')
                 from .web_config import public_origin
                 if 'public_origin' in data:data['public_origin']=public_origin(data['public_origin'])
@@ -333,6 +338,7 @@ class Handler(BaseHTTPRequestHandler):
                 from .themes import THEMES
                 from .updater import validate_url
                 require(values['theme'] in THEMES, 'Unknown theme')
+                require(values['update_channel'] in ('stable','experimental'), 'Unknown update channel')
                 require(type(values['wrapper_update_checks']) is bool,'Invalid update preference')
                 require(isinstance(values['update_feed'],str) and len(values['update_feed'])<=2048,'Invalid release feed')
                 if values['update_feed']:validate_url(values['update_feed'])
@@ -343,7 +349,10 @@ class Handler(BaseHTTPRequestHandler):
                 require(isinstance(values['upstream_contact'], str) and len(values['upstream_contact']) <= 200 and '\n' not in values['upstream_contact'] and '\r' not in values['upstream_contact'], 'Invalid upstream contact')
                 ports = {p for s in store.servers() for p in (s['port'], s['internal_port'])}
                 require(values['web_port'] not in ports, 'Web port conflicts with a Minecraft port')
+                previous_channel=store.settings().get('update_channel','stable')
                 store.set_settings(data)
+                if previous_channel!=values['update_channel']:
+                    manager.updater.last_check=0;manager.updater.manifest=None;manager.updater.state={'status':'unchecked'}
                 if values.get('dns_auto'):
                     from .domains import publish_all
                     manager.spawn_job(lambda: publish_all(manager))

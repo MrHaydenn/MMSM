@@ -1,4 +1,12 @@
-# Verification record — MMSM 0.8.1 (prepared)
+# MMSM 0.8.1 browser branding and update channels
+
+133 Python tests and 49 JavaScript behavior tests passed, with zero skips. Python compilation and JavaScript syntax checks passed. New tests cover public favicon default/upload/replacement, revision refresh, channel validation, experimental commit identity, stable fallback, checksum and package channel/revision stamping. The experimental and stable publication workflows repeat tests and verify their live manifests/downloads through the real updater. Browser layout and live Cloudflare changes remain unverified.
+
+The owner explicitly authorized this stable release. Future ordinary pushes publish experimental builds only; stable publication requires a new explicit request (see AGENTS.md).
+
+---
+
+# Verification record — MMSM 0.8.1
 
 The 126-test full Python suite passed; after final validation changes, all six focused DNS tests passed (the combined suite now contains 127 tests). All 48 JavaScript behavior tests, Python compilation and JavaScript syntax checks passed. Zero skips.
 

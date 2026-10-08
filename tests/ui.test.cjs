@@ -352,3 +352,13 @@ test('domain input uses fixed readonly base and exposes opt-in Cloudflare settin
  const card=h.run('serverCard('+JSON.stringify({...sample,public_hostname:'trigon.minecraft.example.com'})+')');
  assert.match(card,/trigon.minecraft.example.com/);
 });
+
+test('favicon refresh follows the saved logo revision and update channel exposes two choices',async()=>{
+ const h=harness();const fav={href:''};h.elements.set('#favicon',fav);h.elements.set('.brandmark',{innerHTML:''});
+ h.run("appearance={logo:true,logo_revision:'123'};refreshFavicon()");assert.equal(fav.href,'/favicon.svg?v=123');
+ h.run("api=async()=>({logo:true,logo_revision:'456'})");await h.run('refreshBranding()');
+ assert.equal(fav.href,'/favicon.svg?v=456');assert.match(h.elements.get('.brandmark').innerHTML,/logo\?v=456/);
+ const html=h.run("settingsPage({default_memory_mb:4096,update_channel:'experimental'})");
+ assert.match(html,/name="update_channel"/);assert.match(html,/value="stable"/);assert.match(html,/value="experimental" selected/);
+ assert.match(h.run("wrapperUpdateText({status:'available',latest:'0.8.1',channel:'experimental',revision:'abcdef012345'})"),/experimental abcdef0/);
+});

@@ -181,3 +181,9 @@ There was no accessible browser rendering environment. Native dropdown/modal ren
 - Modrinth search API: https://docs.modrinth.com/api/operations/searchprojects/
 
 Documentation review is separate from the live download and offline test evidence above.
+
+## Granular account permissions (experimental)
+
+The permissions update preserves legacy role defaults and adds account creation grants, creator ownership, default capabilities and per-server overrides. HTTP regression tests cover denied read/write operations, hidden server access, raw uploads, ownership spoofing, session revocation, backup scheduling/path restrictions, and template/sync source access. JavaScript behavior tests cover permitted controls, denied forms/tabs and account-policy serialization. The full current suite contains 157 Python tests and 57 UI behavior tests; Python compilation and JavaScript syntax checks are also required before publication.
+
+The account editor's browser layout has not been visually verified. Host acceptance: create a viewer with creation enabled and no existing server access; confirm its own server is fully controllable. Grant console viewing without commands, backup viewing without management, then one server-specific editing permission. Verify the affected account is signed out on save and sees only granted controls after signing back in.

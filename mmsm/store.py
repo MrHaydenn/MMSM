@@ -97,7 +97,7 @@ class Store:
         CREATE TABLE IF NOT EXISTS dismissed_downloads(user_id TEXT NOT NULL, download_id TEXT NOT NULL,
           PRIMARY KEY(user_id, download_id));
         ''')
-        for table, column, definition in [('users','server_ids','TEXT'), ('users','avatar','INTEGER DEFAULT 0'),
+        for table, column, definition in [('users','permissions','TEXT'), ('users','server_ids','TEXT'), ('users','avatar','INTEGER DEFAULT 0'),
                                            ('notifications','kind',"TEXT DEFAULT 'alert'"), ('notifications','payload',"TEXT DEFAULT '{}'"),
                                            ('notifications','resolved','INTEGER DEFAULT 0')]:
             if column not in {r[1] for r in self.db.execute('PRAGMA table_info(' + table + ')')}:
@@ -188,7 +188,7 @@ class Store:
         return user, token, csrf
 
     def session(self, token):
-        rows = self.rows('SELECT users.id, username, role, csrf, server_ids, avatar FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>?',
+        rows = self.rows('SELECT users.id, username, role, csrf, server_ids, avatar, permissions FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>?',
                          (hashlib.sha256(token.encode()).hexdigest(), time.time()))
         require(rows, 'Please sign in', 401)
         return rows[0]

@@ -20,7 +20,7 @@ function harness(){
  vm.runInContext(source,context);
  const run=code=>vm.runInContext(code,context);
  run("user={id:'owner',username:'Hayden',role:'owner'};csrf='csrf';");
- return {run,context,document,elements,handlers,timers,form:(kind,values)=>({dataset:{form:kind},values,querySelector(){return element();},closest(){return null;},reset(){}})};
+ return {run,context,document,elements,handlers,timers,form:(kind,values)=>({dataset:{form:kind},values,querySelector(){return element();},querySelectorAll(){return [];},closest(){return null;},reset(){}})};
 }
 const sample={id:'s1',name:'Test world',loader:'fabric',loader_version:'0.16',minecraft:'1.20.1',port:25565,memory_mb:6144,sleep:true,idle_minutes:15,status:'running',mods:[],launch:{java_major:17},metrics:{ram:1073741824}};
 
@@ -373,6 +373,32 @@ test('wrapper settings is a footer gear before the version and respects global a
  h.run("user={role:'admin',username:'Limited',server_ids:['s1']};shell()");assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="settings"/);
 });
 
+test('creator sees create and owned-server controls without global admin access',()=>{
+ const h=harness();h.run("user={id:'builder',username:'Builder',role:'viewer',server_ids:[],permissions:{create_servers:true,server:{console:false}}}");
+ assert.equal(h.run('canCreate()'),true);assert.equal(h.run('globalAdmin()'),false);
+ const owned={...sample,created_by:'builder'};h.context.owned=owned;
+ assert.equal(h.run("allowed('console',owned)"),true);
+ const header=h.run('serverHeader(owned)');assert.match(header,/Console/);assert.match(header,/data-action="server-stop"/);
+ const card=h.run('serverCard(owned)');assert.match(card,/data-action="server-stop"/);
+ h.run('shell()');assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="accounts"|data-route="settings"/);
+});
+
+test('server capabilities hide denied tabs, commands, file editing and backups actions',async()=>{
+ const h=harness();h.run("user={id:'v',username:'Viewer',role:'viewer'}");
+ const server={...sample,permissions:{console:true,files:true,properties:true,backups:true,players:false,analytics:false,commands:false,edit_files:false,edit_properties:false,manage_backups:false}};h.context.limited=server;h.run('currentServer=limited');
+ const header=h.run('serverHeader(limited)');assert.match(header,/Console/);assert.match(header,/Files/);assert.match(header,/Backups/);assert.doesNotMatch(header,/data-tab="config"|data-tab="players"|data-action="server-stop"/);
+ h.run("tab='console';api=async()=>({lines:['log']})");const consoleHtml=await h.run('serverBody(limited)');assert.match(consoleHtml,/log/);assert.doesNotMatch(consoleHtml,/data-form="command"/);
+ h.run("filePath=''");const files=h.run("filesBody({entries:[]})");assert.doesNotMatch(files,/Upload files|data-action="file-delete"/);
+ const backups=h.run("backupsPanel(limited,{rules:[],schedules:[],history:[]})");assert.doesNotMatch(backups,/data-action="backup-rule-new"|data-action="schedule-new"/);
+});
+
+test('account editor round-trips granular defaults, creation and individual server overrides',()=>{
+ const h=harness();h.run('u={role:"viewer",permissions:{create_servers:true,server:{console:true},overrides:{s1:{power:true}}}}');
+ const html=h.run("accountPermissionFields(u,[{id:'s1',name:'Shared'}])");assert.match(html,/name="create_servers"[^>]*checked/);assert.match(html,/name="override_s1"[^>]*checked/);assert.match(html,/name="perm_s1_power"[^>]*checked/);
+ const checked=new Set(['create_servers','custom_permissions','perm_default_console','perm_s1_power']);
+ h.context.form={querySelector(selector){const name=selector.match(/name="([^"]+)"/)[1];return {checked:checked.has(name)};},querySelectorAll(){return [{name:'override_s1'}];}};
+ const policy=JSON.parse(h.run('JSON.stringify(readAccountPermissions(form))'));assert.equal(policy.create_servers,true);assert.equal(policy.server.console,true);assert.equal(policy.server.commands,false);assert.equal(policy.overrides.s1.power,true);
+});
 
 test('UNM DNS settings select the provider and keep the stored token out of HTML',()=>{
  const h=harness();const html=h.run("settingsPage({default_memory_mb:4096,dns_provider:'unm',unm_token_saved:true})");
@@ -407,3 +433,4 @@ test('new defaults and domain setup hide obsolete SSH fields',()=>{
  assert.match(domain,/domain-suffix/);assert.doesNotMatch(domain,/readonly|placeholder="trigon"/);
  h.run('accountSettingsModal()');assert.match(h.elements.get('#modal').innerHTML,/data-form="username"/);
 });
+

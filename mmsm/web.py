@@ -88,6 +88,15 @@ class Handler(BaseHTTPRequestHandler):
         print(f'HTTP {self.client_address[0]} {self.command} {urlparse(self.path).path}', flush=True)
 
     def reply(self, data, code=200, headers=None, content_type='application/json; charset=utf-8'):
+        if getattr(self,'user',None) is not None:
+            from .permissions import public_server
+            def decorate(value):
+                if isinstance(value,list):return [decorate(v) for v in value]
+                if isinstance(value,dict):
+                    if {'id','loader','minecraft','port'} <= value.keys():return public_server(self,value)
+                    return {k:decorate(v) for k,v in value.items()}
+                return value
+            data=decorate(data)
         payload = json.dumps(data).encode() if isinstance(data, (dict, list)) else data
         self.send_response(code)
         self.send_header('Content-Type', content_type)
@@ -103,6 +112,11 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError): pass
 
     def role(self, minimum):
+        if getattr(self,'server_authorized',False):return
+        if self.url.path.startswith(('/api/downloads','/api/download-history')):
+            from .permissions import creator_allowed, any_capability
+            require(creator_allowed(self.user) or any_capability(self,'downloads') or self.user['role'] in ('owner','admin','operator') and self.user.get('permissions') is None,'Download history permission required',403)
+            return
         levels = {'viewer': 0, 'operator': 1, 'admin': 2, 'owner': 3}
         require(levels[self.user['role']] >= levels[minimum], 'Your account does not have permission for this action', 403)
 
@@ -169,8 +183,8 @@ class Handler(BaseHTTPRequestHandler):
                 length = int(self.headers.get('Content-Length', 0))
                 if self.command == 'POST' and len(self.parts) == 4 and self.parts[:2] == ['api', 'servers'] and self.parts[3] in ('upload','mods-upload'):
                     self.authenticate()
-                    self.role('admin')
                     enforce_scope(self)
+                    self.role('admin')
                     self.server.manager.syncs.guard(self.parts[2], self.headers.get("X-MMSM-Unlink-Sync") == "true")
                     require(self.headers.get('Content-Length') is not None, 'Content-Length is required', 411)
                     require(self.headers.get('Content-Type', '').split(';')[0] == 'application/octet-stream', 'Use application/octet-stream for uploads', 415)
@@ -282,18 +296,31 @@ class Handler(BaseHTTPRequestHandler):
             store.execute('DELETE FROM sessions WHERE user_id=?', (self.user['id'],))
             self.reply({'changed': True},headers={'Set-Cookie':self.session_cookie_header(expire=True,name=self.session_cookie)}); return
         if path == '/api/dashboard' and method == 'GET': self.reply(manager.dashboard(scope(self))); return
-        if path == '/api/history' and method == 'GET': self.reply(manager.history(hours=int(self.query.get('hours', 24)), allowed=scope(self))); return
+        if path == '/api/history' and method == 'GET':
+            from .permissions import capabilities
+            allowed=[s['id'] for s in store.servers() if can_see(self,s['id']) and capabilities(self.user,s)['analytics']]
+            self.reply(manager.history(hours=int(self.query.get('hours',24)),allowed=allowed)); return
         if path == '/api/servers' and method == 'GET':
             archive = self.query.get('archive') == 'true'
             self.reply([manager.public(s) for s in store.servers(archive) if can_see(self,s["id"])]); return
         if path == '/api/servers' and method == 'POST':
-            self.role('admin'); require(scope(self) is None, 'Global administrator required to create servers', 403); result = manager.create(data)
-            if scope(self) is not None:
-                store.execute('UPDATE users SET server_ids=? WHERE id=?',(json.dumps([*scope(self),result['id']]),self.user['id']))
+            from .permissions import creator_allowed
+            require(creator_allowed(self.user),'Server creation permission required',403)
+            if data.get('source_id'):
+                from .permissions import capabilities
+                require(can_see(self,data['source_id']),'Source server not found',404)
+                require(all(capabilities(self.user,store.server(data['source_id'])).values()),'Full control of the source server is required',403)
+            result = manager.create({**data,'created_by':self.user['id']})
             store.audit(self.user['username'], 'Created server ' + result['id'])
             self.reply(result, 201); return
+        if path == '/api/creation-defaults' and method == 'GET':
+            from .permissions import creator_allowed
+            require(creator_allowed(self.user),'Server creation permission required',403)
+            values=store.settings();self.reply({k:values[k] for k in ('default_loader','default_memory_mb','default_sleep','auto_eula','dns_base','default_port_min','default_port_max')});return
         if path == '/api/catalog' and method == 'GET':
-            self.role('admin'); self.reply(manager.stable_catalog(self.query.get('loader', 'fabric'), self.query.get('minecraft'), self.query.get('experimental')=='true')); return
+            from .permissions import creator_allowed, any_capability
+            require(creator_allowed(self.user) or any_capability(self,'runtime'),'Server creation or runtime-update permission required',403)
+            self.reply(manager.stable_catalog(self.query.get('loader', 'fabric'), self.query.get('minecraft'), self.query.get('experimental')=='true')); return
         if path == '/api/modrinth/search' and method == 'GET':
             self.role('admin')
             sid = self.query.get('server_id')
@@ -386,11 +413,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply({'saved': True, 'restart_required': values['web_port'] != self.server.server_port or values['bind_host'] != self.server.server_address[0] or (values['public_origin'] or None) != self.server.origin}); return
         if path == '/api/users':
             self.role('admin')
-            if method == 'GET': self.reply([user_public(r) for r in store.rows('SELECT id,username,role,created,server_ids,avatar FROM users')]); return
+            if method == 'GET': self.reply([user_public(r) for r in store.rows('SELECT id,username,role,created,server_ids,avatar,permissions FROM users')]); return
             if method == 'POST':
                 selected = validate_scope(store,data)
+                from .permissions import validate_policy
+                permissions=validate_policy(store,data.get('permissions'))
                 user = store.add_user(data.get('username'), data.get('password'), data.get('role', 'viewer'))
-                store.execute('UPDATE users SET server_ids=? WHERE id=?',(selected,user['id']))
+                store.execute('UPDATE users SET server_ids=?,permissions=? WHERE id=?',(selected,permissions,user['id']))
                 store.audit(self.user['username'], 'Created account ' + user['username'])
                 self.reply(user, 201); return
         if len(self.parts) == 3 and self.parts[:2] == ['api', 'users'] and method in ('PUT', 'DELETE'):
@@ -404,7 +433,9 @@ class Handler(BaseHTTPRequestHandler):
                 require(role in ('admin', 'operator', 'viewer'), 'Invalid role')
                 hashed = password_hash(data['password']) if data.get('password') else rows[0]['password']
                 selected = validate_scope(store,data) if 'server_ids' in data else rows[0]['server_ids']
-                store.execute('UPDATE users SET role=?,password=?,server_ids=? WHERE id=?', (role, hashed, selected, uid))
+                from .permissions import validate_policy
+                permissions=validate_policy(store,data['permissions']) if 'permissions' in data else rows[0]['permissions']
+                store.execute('UPDATE users SET role=?,password=?,server_ids=?,permissions=? WHERE id=?', (role, hashed, selected, permissions, uid))
             store.execute('DELETE FROM sessions WHERE user_id=?', (uid,))
             store.audit(self.user['username'], method + ' account ' + rows[0]['username'])
             self.reply({'ok': True}); return

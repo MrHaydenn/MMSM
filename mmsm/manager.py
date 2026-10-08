@@ -193,7 +193,7 @@ class Manager(Features):
             require(internal, 'No internal server port available', 409)
             sid = secrets.token_hex(12)
             server = dict(id=sid, name=name, loader=loader, minecraft=mc, loader_version=lv,
-                          memory_mb=memory, port=port, internal_port=internal, archived=False,
+                          memory_mb=memory, port=port, internal_port=internal, archived=False, created_by=data.get('created_by'),
                           sleep=bool(data.get('sleep', defaults['default_sleep'])),
                           idle_minutes=source['idle_minutes'] if source else defaults['idle_minutes'], created=time.time(), mods=[], launch=None,
                           eula=True, directory=self.directory_name(name, sid))

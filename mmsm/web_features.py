@@ -5,31 +5,36 @@ import re
 import time
 from .store import require, atomic_write, confined
 from .images import image_bytes, minecraft_head
+from .permissions import capabilities
 
 
 def scope(handler):
-    user=handler.user
-    if user['role']=='owner' or user.get('server_ids') is None:return None
-    return json.loads(user['server_ids'])
+    from .permissions import decode
+    user=handler.user; ids=decode(user.get('server_ids'))
+    if user['role']=='owner' or ids is None:return None
+    owned=[s['id'] for s in handler.server.manager.store.servers() if s.get('created_by')==user['id']]
+    return list(set(ids+owned))
 
 
 def can_see(handler,sid):
-    allowed=scope(handler)
-    return allowed is None or sid in allowed
+    from .permissions import visible
+    return visible(handler.user,handler.server.manager.store.server(sid))
 
 
 def enforce_scope(handler):
     sid=None
     if handler.parts[:2]==['api','servers'] and len(handler.parts)>=3:sid=handler.parts[2]
     elif handler.url.path.startswith('/api/modrinth/'):sid=handler.query.get('server_id')
-    if sid:require(can_see(handler,sid),'Server not found',404)
+    from .permissions import request_server, authorize
+    sid=request_server(handler)
+    if sid:authorize(handler,sid)
     # Scoped admins manage their own servers, not global identity/settings policy.
-    if handler.url.path.startswith(('/api/users','/api/settings','/api/audit')):
-        require(scope(handler) is None,'Global administration requires an unrestricted administrator',403)
+    if handler.url.path.startswith(('/api/users','/api/settings','/api/audit','/api/unm-connection')):
+        require(handler.user.get('server_ids') is None or handler.user['role']=='owner','Global administration requires an unrestricted administrator',403)
 
 
 def user_public(row):
-    return {k:row[k] for k in ('id','username','role','created','avatar') if k in row} | {'server_ids':json.loads(row['server_ids']) if row.get('server_ids') is not None else None}
+    return {k:row[k] for k in ('id','username','role','created','avatar') if k in row} | {'server_ids':json.loads(row['server_ids']) if row.get('server_ids') is not None else None, 'permissions':json.loads(row['permissions']) if row.get('permissions') is not None else None}
 
 
 def validate_scope(store,data):
@@ -42,7 +47,7 @@ def validate_scope(store,data):
 
 def notification_rows(h, include_read=False):
     store=h.server.manager.store
-    return [dict(row,payload=json.loads(row['payload']),seen=int(bool(row['read_id']))) for row in store.rows(
+    return [dict(row,payload=json.loads(row['payload']),seen=int(bool(row['read_id'])),can_manage_players=bool(row['server_id'] and capabilities(h.user,store.server(row['server_id']))['manage_players'])) for row in store.rows(
         'SELECT n.*, r.notification_id AS read_id FROM notifications n LEFT JOIN notification_reads r ON r.notification_id=n.id AND r.user_id=? WHERE (? OR r.notification_id IS NULL) ORDER BY n.created DESC',(h.user['id'], int(include_read)))
         if (row['server_id'] is None and scope(h) is None or row['server_id'] and can_see(h,row['server_id']) and not store.server(row['server_id'])['archived'])][:100]
 
@@ -58,15 +63,17 @@ def extra_route(h):
             else: return False
         elif action=='sync-edit' and method=='POST': h.reply({'ready':True})
         elif action=='syncs' and method=='GET':
-            sources=[{'id':s['id'],'name':s['name'],'loader':s['loader'],'minecraft':s['minecraft'],'folders':[p.name for p in manager.folder(s['id']).iterdir() if p.is_dir() and not p.is_symlink()]} for s in store.servers(False) if s['id']!=sid and can_see(h,s['id']) and not s.get('sync')]
+            sources=[{'id':s['id'],'name':s['name'],'loader':s['loader'],'minecraft':s['minecraft'],'folders':[p.name for p in manager.folder(s['id']).iterdir() if p.is_dir() and not p.is_symlink()]} for s in store.servers(False) if s['id']!=sid and can_see(h,s['id']) and all(capabilities(h.user,s).values()) and not s.get('sync')]
             rule=server.get('sync')
             if rule and not can_see(h,rule['source_id']): rule={'status':'Source is outside your account access'}
             h.reply({'rule':rule,'sources':sources})
         elif action=='syncs' and method=='PUT':
-            if data.get('source_id'): require(can_see(h,data['source_id']),'Source server not found',404)
+            if data.get('source_id'):
+                require(can_see(h,data['source_id']),'Source server not found',404)
+                require(all(capabilities(h.user,store.server(data['source_id'])).values()),'Full control of the sync source is required',403)
             h.reply(manager.syncs.save(sid,data))
         elif action=='sync-now' and method=='POST':
-            require(can_see(h,server.get('sync',{}).get('source_id')),'Source server not found',404)
+            source=server.get('sync',{}).get('source_id');require(source and can_see(h,source) and all(capabilities(h.user,store.server(source)).values()),'Full control of the sync source is required',403)
             h.reply(manager.syncs.run(sid))
         else: return False
         store.audit(h.user['username'],method+' '+action+' '+sid) if method!='GET' else None
@@ -82,7 +89,8 @@ def extra_route(h):
     if len(h.parts)==4 and h.parts[:2]==['api','servers'] and h.parts[3]=='error-report' and method=='GET':
         h.role('operator');h.reply({'text':manager.error_report(h.parts[2])});return True
     if path=='/api/analytics' and method=='GET':
-        h.reply(manager.usage_history(int(h.query.get('days',7)),scope(h)));return True
+        allowed=[s['id'] for s in store.servers() if can_see(h,s['id']) and capabilities(h.user,s)['analytics']]
+        h.reply(manager.usage_history(int(h.query.get('days',7)),allowed));return True
     if path=='/api/download-history' and method=='GET':
         h.role('operator');h.reply(store.download_history(scope(h),page=int(h.query.get('page',0))));return True
     if path=='/api/modrinth/compatible' and method=='GET':
@@ -117,9 +125,9 @@ def extra_route(h):
         for row in notification_rows(h):store.execute('INSERT OR IGNORE INTO notification_reads VALUES(?,?)',(h.user['id'],row['id']))
         h.reply({'ok':True});return True
     if path=='/api/notifications/action' and method=='POST':
-        h.role('admin')
         row=next((r for r in notification_rows(h, True) if r['id']==data.get('id')),None)
         require(row,'Notification not found',404);require(row['kind']=='whitelist','This notification has no whitelist action')
+        require(capabilities(h.user,store.server(row['server_id']))['manage_players'],'Player management permission required',403)
         require(data.get('action') in ('whitelist','ignore'),'Invalid notification action')
         result={}
         if data['action']=='whitelist':result=manager.player_action(row['server_id'],{'name':row['payload']['name'],'action':'whitelist'})

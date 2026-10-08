@@ -321,3 +321,12 @@ no longer needed. Test connectivity after saving settings, then save a server's
 public address to verify token authorization and publishing. Each installation uses
 its own domain names and token. The server creation address uses its allocated
 public Minecraft port; alternative external mappings can be set in Public address.
+
+
+### Account permissions
+
+In Accounts, add or edit an account and enable **Allow this account to create servers**. New servers belong to that account and remain visible and fully controllable even if creation permission is later removed. Existing servers still follow the selected server-access list.
+
+Expand **Default permissions for other visible servers** to replace role defaults, or **Permissions for individual existing servers** to override a particular server. Console viewing and sending commands, file viewing and editing, properties viewing and editing, player management, mods/plugins, backups, power controls, runtime updates, settings, syncs, addresses, archive/deletion, analytics and downloads have separate controls. Checks apply to API requests as well as the UI. Saving permissions revokes that account's sessions so it signs in with the new permissions. Legacy accounts keep their existing role defaults until edited.
+
+Delegated backup management uses the server's default backup folder; non-backup schedules also require power permission. Copying or syncing a template requires full control of its source. These controls govern MMSM access; Minecraft servers and uploaded JARs run as the MMSM host's operating-system account, without an OS sandbox.

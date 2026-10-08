@@ -1,0 +1,46 @@
+name: Verify published update
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/verify-release.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch and stage live GitHub update
+        run: |
+          python - <<'PY'
+          import tempfile
+          from pathlib import Path
+          from unittest.mock import patch
+          from mmsm import __version__
+          from mmsm.store import Store
+          from mmsm.manager import Manager
+          with tempfile.TemporaryDirectory() as tmp:
+              store = Store(Path(tmp) / 'data', project_root=Path(tmp))
+              manager = Manager(store, start_background=False)
+              try:
+                  updater = manager.updater
+                  updater.shutdown = lambda: None
+                  # Simulate an older installed version; transport and package validation are real.
+                  with patch('mmsm.updater.__version__', '0.0.0'):
+                      state = updater.check()
+                      assert state['status'] == 'available', state
+                      assert state['latest'] == __version__, state
+                      assert updater.prepare()['restarting']
+                  assert (updater.work / 'stage/mmsm/web.py').is_file()
+                  print('Live feed, redirects, ZIP download, SHA-256 and staging verified:', state['latest'])
+              finally:
+                  manager.close()
+                  store.db.close()
+          PY

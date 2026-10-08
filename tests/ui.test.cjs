@@ -387,3 +387,13 @@ test('UNM address panel renders the server A record and SRV target',()=>{
  assert.match(html,/Published to UNM/);assert.match(html,/UNM owns the A and SRV/);
  assert.match(html,/target test.minecraft.example.com/);
 });
+
+test('UNM tunnel settings expose automatic maintenance and a saved-settings connection test',async()=>{
+ const h=harness();const html=h.run("settingsPage({default_memory_mb:4096,dns_provider:'unm',unm_tunnel_enabled:true,unm_connection:{message:'Connected'}})");
+ assert.match(html,/name="unm_tunnel_enabled" type="checkbox" checked/);
+ assert.match(html,/name="unm_ssh_key"/);assert.match(html,/data-action="unm-test"/);
+ h.elements.set('#unm-connection-status',{textContent:''});
+ h.run("api=async(path)=>({message:'Connected to UNM through SSH'});");
+ await h.handlers.get('click')({target:{closest:()=>({dataset:{action:'unm-test'}})}});
+ assert.equal(h.elements.get('#unm-connection-status').textContent,'Connected to UNM through SSH');
+});

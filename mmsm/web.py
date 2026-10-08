@@ -317,13 +317,19 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(store.rows('SELECT * FROM notifications ORDER BY created DESC LIMIT 100')); return
         if path == '/api/notifications/read' and method == 'POST':
             self.role('operator'); store.execute('UPDATE notifications SET seen=1'); self.reply({'ok': True}); return
+        if path == '/api/unm-connection' and method == 'GET':
+            self.role('admin')
+            self.reply(manager.unm_tunnel.status()); return
+        if path == '/api/unm-connection/test' and method == 'POST':
+            self.role('admin')
+            self.reply(manager.unm_tunnel.test()); return
         if path == '/api/settings':
             self.role('admin')
             if method == 'GET':
                 safe = store.settings(); safe['dns_token_saved'] = bool(safe.pop('dns_token', '')); safe['unm_token_saved'] = bool(safe.pop('unm_token', ''))
-                self.reply({**safe, 'running_web_port': self.server.server_port, 'running_bind_host': self.server.server_address[0], 'wrapper_update': manager.updater.status()}); return
+                self.reply({**safe, 'unm_connection': manager.unm_tunnel.status(), 'running_web_port': self.server.server_port, 'running_bind_host': self.server.server_address[0], 'wrapper_update': manager.updater.status()}); return
             if method == 'PUT':
-                allowed = {'dns_provider', 'unm_url', 'unm_token', 'update_channel', 'dns_auto', 'dns_zone_id', 'dns_token', 'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
+                allowed = {'unm_tunnel_enabled','unm_ssh_host','unm_ssh_user','unm_ssh_port','unm_ssh_key','unm_local_port','dns_provider', 'unm_url', 'unm_token', 'update_channel', 'dns_auto', 'dns_zone_id', 'dns_token', 'dns_zone', 'dns_base', 'dns_ip', 'bind_host', 'public_origin', 'web_port', 'default_loader', 'default_memory_mb', 'default_sleep', 'idle_minutes', 'retention_days', 'update_interval_hours', 'upstream_contact', 'auto_eula', 'theme', 'update_feed', 'wrapper_update_checks'}
                 require(set(data) <= allowed, 'Unknown setting')
                 from .web_config import public_origin
                 if 'public_origin' in data:data['public_origin']=public_origin(data['public_origin'])
@@ -333,6 +339,11 @@ class Handler(BaseHTTPRequestHandler):
                 require(isinstance(data.get('unm_token',''),str) and len(data.get('unm_token',''))<=512 and not any(c in data.get('unm_token','') for c in '\r\n'), 'Invalid UNM token')
                 values = {**store.settings(), **data}
                 from .domains import validate_settings
+                from .unm_tunnel import validate as validate_tunnel
+                validate_tunnel(values)
+                if values.get('unm_tunnel_enabled'):
+                    data['unm_url']='http://127.0.0.1:'+str(values['unm_local_port'])
+                    values['unm_url']=data['unm_url']
                 validate_settings(values)
                 require(values['bind_host'] in ('0.0.0.0','127.0.0.1'),'Choose all interfaces or localhost')
                 import re

@@ -40,6 +40,8 @@ class Manager(Features):
         self.jobs = set()
         from .updater import Updater
         self.updater = Updater(self)
+        from .unm_tunnel import UNMTunnel
+        self.unm_tunnel = UNMTunnel(self)
         self.initialize_features()
         from .syncs import Syncs
         self.syncs = Syncs(self)
@@ -1009,6 +1011,7 @@ class Manager(Features):
 
     def close(self):
         self.closing.set()
+        self.unm_tunnel.close()
         # Wait for a folder transaction before shutting down its store/listeners.
         with self.syncs.lock:
             pass

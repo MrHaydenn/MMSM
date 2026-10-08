@@ -65,7 +65,7 @@ GITHUB_UPDATE_FEED = 'https://github.com/MrHaydenn/MMSM/releases/latest/download
 
 DEFAULTS = {'bind_host':'0.0.0.0', 'public_origin':'', 'web_port': 11015, 'default_loader': 'fabric', 'default_memory_mb': 4096,
             'default_sleep': False, 'idle_minutes': 15, 'retention_days': 30,
-            'dns_provider': 'cloudflare', 'unm_url': '', 'unm_token': '', 'dns_auto': False, 'dns_zone_id': '', 'dns_token': '', 'dns_zone': '', 'dns_base': '', 'dns_ip': '', 'theme': 'forest', 'update_channel': 'stable', 'update_feed': GITHUB_UPDATE_FEED, 'wrapper_update_checks': True, 'update_interval_hours': 6, 'upstream_contact': '', 'auto_eula': True,
+            'unm_tunnel_enabled': False, 'unm_ssh_host': '', 'unm_ssh_user': 'root', 'unm_ssh_port': 22, 'unm_ssh_key': '', 'unm_local_port': 8790, 'dns_provider': 'cloudflare', 'unm_url': '', 'unm_token': '', 'dns_auto': False, 'dns_zone_id': '', 'dns_token': '', 'dns_zone': '', 'dns_base': '', 'dns_ip': '', 'theme': 'forest', 'update_channel': 'stable', 'update_feed': GITHUB_UPDATE_FEED, 'wrapper_update_checks': True, 'update_interval_hours': 6, 'upstream_contact': '', 'auto_eula': True,
             'accent_color': '#a6ec80', 'background_color': '#0b1010', 'panel_color': '#111918', 'navbar_color': '#101817', 'hover_color': '#24342c'}
 
 

@@ -75,3 +75,16 @@ dig test.minecraft.mrhaydenn.us A
 ```
 
 Connect Minecraft Java using `test.minecraft.mrhaydenn.us`. DNS caches may retain the old address/port until TTL expires (300 seconds); a running server and a working forwarding rule are still required.
+
+
+## MMSM-managed SSH connection
+
+MMSM Settings → Minecraft domains → UNM delegated DNS now supports **Maintain the UNM SSH connection automatically**. This launches the host's installed OpenSSH client without a console window on Windows, retries dropped connections, and terminates only its own SSH process on shutdown. It runs whenever MMSM runs; MMSM itself must start after boot if this should start after boot.
+
+Use VPS address `157.230.239.126`, SSH username `root`, SSH port `22`, the absolute path to your existing `unm_mmsm` private key on the MMSM computer (not `.pub`), and local connection port `8790`. When enabled, saving Settings sets the UNM URL automatically to `http://127.0.0.1:8790`. Keep the DNS integration token and zone settings unchanged.
+
+Close your previous manual SSH tunnel before enabling this so its local port is free. Save Settings, wait a few seconds, then click **Test UNM connection**. Status updates every five seconds while Settings is open. Once connected, save a server address; the existing five-minute DNS retry also continues.
+
+The key must already be authorized on the VPS, and the same Windows account running MMSM must already trust the VPS host key. MMSM uses `StrictHostKeyChecking=yes`, `BatchMode=yes`, and the specified identity; it never accepts a changed/unknown host key automatically or stores a key passphrase. If your private key has a passphrase, load it into the SSH agent for that account with `ssh-add` first. A Windows service running under a different account needs its own accessible key, known-hosts file and agent arrangement. Test from that account. Authentication failures and occupied local ports are shown in connection status and retried after a delay.
+
+To return to an external tunnel or direct HTTPS URL, turn off managed SSH, save, then enter the external UNM URL and save again. This does not modify DNS records or the VPS firewall.

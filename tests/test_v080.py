@@ -103,9 +103,9 @@ class SyncHTTP(support.HTTPTests):
         (self.manager.folder('source')/'config').mkdir()
         rule={'source_id':'source','folders':['config'],'confirm':True}
         self.assertEqual(self.request('/api/servers/target/syncs','PUT',rule)[0],200)
-        code,body,_=self.request('/api/servers/target/properties','PUT',{'values':{'motd':'test'}})
+        code,body,_=self.request('/api/servers/target/files','PUT',{'path':'config/options.txt','content':'test'})
         self.assertEqual(code,409);self.assertIn('SYNC_CONFLICT:',body['error'])
-        self.assertEqual(self.request('/api/servers/target/properties','PUT',{'values':{'motd':'test'}},{'X-MMSM-Unlink-Sync':'true'})[0],200)
+        self.assertEqual(self.request('/api/servers/target/files','PUT',{'path':'config/options.txt','content':'test'},{'X-MMSM-Unlink-Sync':'true'})[0],200)
         self.assertNotIn('sync',self.store.server('target'))
         self.store.add_user('limited','limited-password-123','admin')
         self.store.execute('UPDATE users SET server_ids=? WHERE username=?',(json.dumps(['target']),'limited'))

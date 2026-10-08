@@ -102,6 +102,21 @@ class JVMChanges(test_v02.ExplicitJVMControlTests):
         self.assertEqual(self.manager.state(sid)['exit_code'],7)
         self.assertIn('Fixture startup failure',self.manager.error_report(sid))
 
+    def test_five_minute_timer_sleeps_at_boundary_and_saves_fixture_world(self):
+        s=self.launch();sid=s['id'];s=self.store.server(sid)
+        s['idle_minutes']=5;self.store.save_server(s)
+        began=time.time();self.manager.set_state(sid,idle_since=began)
+        jobs=[]
+        with patch.object(self.manager,'spawn_job',side_effect=jobs.append):
+            with patch('mmsm.manager.time.time',return_value=began+299):
+                self.manager.sample();self.assertEqual(jobs,[])
+                self.assertAlmostEqual(self.manager.public(s)['sleep_info']['remaining_seconds'],1)
+            with patch('mmsm.manager.time.time',return_value=began+300):self.manager.sample()
+        self.assertEqual(len(jobs),1);jobs[0]()
+        self.assertEqual(self.manager.state(sid)['status'],'sleeping')
+        self.assertFalse(self.manager.alive(sid))
+        self.assertTrue((self.manager.folder(sid)/'world-saved.txt').exists())
+
     def test_actual_sample_queued_sleep_is_cancelled_by_manual_stop(self):
         s=self.launch();sid=s['id'];jobs=[]
         self.manager.set_state(sid,idle_since=time.time()-3600)

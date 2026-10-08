@@ -95,7 +95,19 @@ class Manager(Features):
     def public(self, s):
         from .domains import plan
         address = plan(self.store.settings(), s) if s.get('public_address', {}).get('label') else {}
-        return {**s, **self.state(s['id']), 'port_shared': sum(x['port'] == s['port'] for x in self.store.servers()) > 1, 'public_hostname': address.get('hostname'), 'metrics': self.latest['servers'].get(s['id'], {}), 'icon': (self.folder(s['id']) / 'server-icon.png').is_file()}
+        return {**s, **self.state(s['id']), 'port_shared': sum(x['port'] == s['port'] for x in self.store.servers()) > 1, 'public_hostname': address.get('hostname'), 'metrics': self.latest['servers'].get(s['id'], {}), 'sleep_info': self.sleep_info(s), 'icon': (self.folder(s['id']) / 'server-icon.png').is_file()}
+
+    def sleep_info(self, server):
+        state = self.state(server['id'])
+        if not server['sleep']: return {'reason': 'Sleep disabled'}
+        if server.get('manual_stop'): return {'reason': 'Sleep paused by Stop; Start or Sleep now to re-enable'}
+        if state['status'] == 'sleeping': return {'reason': 'Asleep; a Minecraft ping will wake it'}
+        if state['status'] != 'running': return {'reason': 'Idle timer starts when the server is online'}
+        if state.get('status_query_error'): return {'reason': 'Idle timer reset: player status check failed', 'error': state['status_query_error']}
+        if state.get('players'): return {'reason': 'Idle timer paused while players are online'}
+        if state.get('idle_since') is None: return {'reason': 'Waiting for a successful empty-player check'}
+        remaining = max(0, server['idle_minutes'] * 60 - (time.time() - state['idle_since']))
+        return {'reason': 'Sleeping in ' + str(int(remaining + 0.999)) + ' seconds without players', 'remaining_seconds': remaining}
 
     def ensure_proxy(self, server, claim=False):
         with self.lock:
@@ -230,7 +242,7 @@ class Manager(Features):
                 self.write_properties(target, {k:v for k,v in self.properties(source_id).items() if k not in PROTECTED_PROPERTIES})
                 if data.get('source_mode') == 'sync':
                     target = self.store.server(sid)
-                    target['sync'] = dict(source_id=source_id, folders=folders, runtime=True, settings=True, status='Pending first sync')
+                    target['sync'] = dict(source_id=source_id, folders=folders, runtime=True, status='Pending first sync')
                     self.store.save_server(target)
         self.job(sid, 'installing', provision)
         return self.public(server)
@@ -975,6 +987,8 @@ class Manager(Features):
                 try:
                     report = status(s['internal_port'])
                     players = report['players']['online']
+                    require(type(players) is int and players >= 0, 'Invalid online player count')
+                    self.set_state(sid, status_query_error=None)
                     if self.state(sid)['status'] == 'starting':
                         self.set_state(sid, status='running', idle_since=timestamp)
                     self.set_state(sid, players=players)
@@ -983,16 +997,16 @@ class Manager(Features):
                         self.set_state(sid, idle_since=None)
                     elif state.get('idle_since') is None:
                         self.set_state(sid, idle_since=timestamp)
-                    elif s['sleep'] and not s.get('manual_stop') and timestamp - state['idle_since'] >= s['idle_minutes'] * 60 and state['status'] == 'running':
+                    elif s['sleep'] and not s.get('manual_stop') and timestamp - state['idle_since'] >= s['idle_minutes'] * 60 and state['status'] == 'running' and sid not in self.operation_guards:
                         idle_token = secrets.token_hex(8)
                         self.set_state(sid, status='stopping', idle_token=idle_token)
                         def sleep_job(server_id=sid, token=idle_token):
                             try: self.stop(server_id, sleeping=True, idle_token=token)
                             except Exception as e: self.store.notify(server_id, 'Sleep failed: ' + str(e))
                         self.spawn_job(sleep_job)
-                except (OSError, ValueError, EOFError, KeyError):
+                except (OSError, ValueError, EOFError, KeyError, TypeError, Problem) as exc:
                     players = None  # Unknown is not zero; never sleep on a failed status query.
-                    self.set_state(sid, idle_since=None, players=None)
+                    self.set_state(sid, idle_since=None, players=None, status_query_error=str(exc) or type(exc).__name__)
             proxy = self.proxies.get(sid)
             totals = (proxy.rx, proxy.tx) if proxy else (0, 0)
             prior = self.sampler.previous.get(sid, totals)

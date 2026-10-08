@@ -185,7 +185,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.authenticate()
                     enforce_scope(self)
                     self.role('admin')
-                    self.server.manager.syncs.guard(self.parts[2], self.headers.get("X-MMSM-Unlink-Sync") == "true")
+                    self.server.manager.syncs.guard(self.parts[2], self.headers.get("X-MMSM-Unlink-Sync") == "true", resource="mods" if self.parts[3]=="mods-upload" else "files", paths=[self.query.get("path", "")])
                     require(self.headers.get('Content-Length') is not None, 'Content-Length is required', 411)
                     require(self.headers.get('Content-Type', '').split(';')[0] == 'application/octet-stream', 'Use application/octet-stream for uploads', 415)
                     result = (self.server.manager.upload_mod(self.parts[2],self.query.get('name',''),self.rfile,length) if self.parts[3]=='mods-upload' else self.server.manager.upload_file(self.parts[2], self.query.get('path', ''), self.rfile, length))
@@ -267,9 +267,13 @@ class Handler(BaseHTTPRequestHandler):
         self.authenticate()
         enforce_scope(self)
         require(method=='GET' or not manager.updater.installing, 'MMSM update in progress',409)
-        if len(self.parts) == 4 and self.parts[:2] == ['api', 'servers'] and method != 'GET' and self.parts[3] in ('files', 'mods-install', 'mods-toggle', 'pack-install', 'project-install', 'configure', 'update', 'properties', 'sync-edit'):
+        if len(self.parts) == 4 and self.parts[:2] == ['api', 'servers'] and method != 'GET' and self.parts[3] in ('files', 'mods-install', 'mods-toggle', 'pack-install', 'project-install', 'update', 'sync-edit'):
             self.role('admin')
-            manager.syncs.guard(self.parts[2], self.headers.get('X-MMSM-Unlink-Sync') == 'true')
+            action=self.parts[3]
+            resource=None if action=='pack-install' else 'runtime' if action=='update' else 'files' if action=='files' else 'mods'
+            paths=[self.query.get('path',data.get('path',''))]
+            if action=='sync-edit': resource=data.get('resource');paths=data.get('paths',[])
+            manager.syncs.guard(self.parts[2], self.headers.get('X-MMSM-Unlink-Sync') == 'true',resource=resource,paths=paths)
         if extra_route(self):
             if method != 'GET': store.audit(self.user['username'], method + ' ' + path)
             return

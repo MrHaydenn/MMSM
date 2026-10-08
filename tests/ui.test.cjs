@@ -434,3 +434,12 @@ test('new defaults and domain setup hide obsolete SSH fields',()=>{
  h.run('accountSettingsModal()');assert.match(h.elements.get('#modal').innerHTML,/data-form="username"/);
 });
 
+
+test('sleep diagnostics are visible and sync excludes operational settings',async()=>{
+ const h=harness();h.context.sample={...sample,sleep_info:{reason:'Sleeping in 240 seconds without players'}};
+ h.run("sid=sample.id;currentServer=sample;tab='config'");
+ assert.match(await h.run('serverBody(sample)'),/Sleeping in 240 seconds without players/);
+ const html=h.run("syncPanel({rule:{source_id:'other',folders:['config'],settings:true},sources:[]})");
+ assert.doesNotMatch(html,/name="settings"/);
+ assert.match(html,/Sleep, idle time, RAM, AutoStart and server properties stay independent/);
+});

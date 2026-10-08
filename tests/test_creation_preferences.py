@@ -33,14 +33,14 @@ class Creation(support.Base):
         source = support.server(self.store)
         with patch.object(self.manager, 'install'), patch.object(self.manager, 'job', side_effect=lambda sid,label,fn: fn()):
             created = self.manager.create(dict(name='Synced',source_id=source['id'],source_mode='sync'))
-        self.assertTrue(self.store.server(created['id'])['sync']['settings'])
+        self.assertNotIn('settings',self.store.server(created['id'])['sync'])
         self.assertTrue(self.store.server(created['id'])['sync']['runtime'])
         source['memory_mb'] = 4096
         self.store.save_server(source)
         self.manager.write_properties(source, {'motd': 'Synced properties'})
         self.manager.syncs.run(created['id'])
-        self.assertEqual(self.store.server(created['id'])['memory_mb'], 4096)
-        self.assertEqual(self.manager.properties(created['id'])['motd'], 'Synced properties')
+        self.assertEqual(self.store.server(created['id'])['memory_mb'], created['memory_mb'])
+        self.assertNotEqual(self.manager.properties(created['id']).get('motd'), 'Synced properties')
 
 class Username(support.HTTPTests):
     test_setup_auth_csrf_roles_and_session_revocation=None
@@ -55,3 +55,4 @@ class Username(support.HTTPTests):
         self.assertEqual(me['username'], 'NewOwner')
         self.assertEqual(me['role'], 'owner')
         self.assertEqual(self.store.login('newowner','correct-horse-battery')[0]['id'], me['id'])
+

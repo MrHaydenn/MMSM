@@ -155,7 +155,22 @@ def publish(manager, sid):
         manager.store.save_server(server)
 
 
+def cleanup_deleted(manager):
+    # Durable tombstones survive server removal, outages and manager restarts.
+    with PUBLISH_LOCK:
+        settings = manager.store.settings()
+        for row in manager.store.rows('SELECT * FROM unm_dns_cleanup'):
+            try:
+                require(unm_url(settings.get('unm_url', '')) == row['endpoint'] and settings.get('dns_zone') == row['zone'], 'Restore the original UNM endpoint and zone for pending DNS cleanup')
+                require(bool(settings.get('unm_token')), 'UNM token required for pending DNS cleanup')
+                unm_request(settings, row['id'], None)
+            except Exception:
+                continue  # Keep the journal entry; no credentials are stored in it.
+            manager.store.execute('DELETE FROM unm_dns_cleanup WHERE id=?', (row['id'],))
+
+
 def publish_all(manager):
+    cleanup_deleted(manager)
     for server in manager.store.servers(False):
         if server.get('public_address', {}).get('label') or server.get('dns_managed') or server.get('unm_managed'):
             try: publish(manager, server['id'])

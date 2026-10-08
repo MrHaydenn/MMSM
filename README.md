@@ -296,3 +296,10 @@ The browser tab icon uses the saved launcher image, with the top-left cube as de
 ### Experimental changes after 0.8.1
 
 Wrapper Settings is now a gear beside the version number at the bottom of the sidebar (also accessible in the compact mobile layout). It retains global administrator access restrictions. Usernames preserve their typed capitalization, while login and duplicate-name detection are case-insensitive; passwords remain case-sensitive. Existing account capitalization is unchanged.
+
+
+UNM DNS records owned by MMSM are removed when their server is permanently deleted.
+If UNM is unavailable, cleanup is saved locally and retried every five minutes while
+MMSM runs, including after restart. Keep the original UNM endpoint, zone and a valid
+integration token configured until cleanup completes. Archiving retains DNS records;
+port forwarding is managed separately in UNM.

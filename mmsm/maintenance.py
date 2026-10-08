@@ -52,6 +52,13 @@ class Maintenance:
                     for table in ('notifications','metrics','usage_hourly','backup_records'):db.execute('DELETE FROM '+table+' WHERE server_id=?',(sid,))
                     for row in db.execute('SELECT id,server_ids FROM users WHERE server_ids IS NOT NULL').fetchall():
                         db.execute('UPDATE users SET server_ids=? WHERE id=?',(json.dumps([v for v in json.loads(row['server_ids']) if v!=sid]),row['id']))
+                    identity = server.get('unm_managed')
+                    settings = self.store.settings()
+                    if not identity and settings.get('dns_provider') == 'unm' and settings.get('dns_auto') and server.get('public_address', {}).get('label'):
+                        from .domains import unm_url
+                        identity = {'url': unm_url(settings['unm_url']), 'zone': settings['dns_zone']}
+                    if identity:
+                        db.execute('INSERT OR REPLACE INTO unm_dns_cleanup VALUES(?,?,?)', (sid, identity['url'], identity['zone']))
                     db.execute('DELETE FROM servers WHERE id=?',(sid,))
             except Exception:
                 if moved:os.replace(target,source)
@@ -59,12 +66,15 @@ class Maintenance:
                 if proxy and not server['archived']:self.ensure_proxy(server)
                 raise
             for mapping in (self.states,self.logs,self.processes,self.online_names,self.latest['servers'],self.sampler.previous):mapping.pop(sid,None)
+            from .domains import cleanup_deleted
+            cleanup_deleted(self)
+            warning = 'Server deleted. UNM DNS cleanup is pending and will retry every five minutes while MMSM is running.' if self.store.rows('SELECT 1 FROM unm_dns_cleanup WHERE id=?', (sid,)) else ''
             try:
                 if moved:shutil.rmtree(target)
                 self.store.execute('DELETE FROM server_deletions WHERE id=?',(sid,))
-                return {'deleted':True}
+                return {'deleted':True, **({'warning': warning} if warning else {})}
             except OSError:
-                return {'deleted':True,'warning':'Server removed. Some files are locked; MMSM will retry file cleanup on its next start.'}
+                return {'deleted':True,'warning':'Server removed. Some files are locked; MMSM will retry file cleanup on its next start.' + (' ' + warning if warning else '')}
 
     def compatible_project_versions(self,sid,project_id,project_type='mod'):
         server=self.active(sid)

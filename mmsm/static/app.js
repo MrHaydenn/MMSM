@@ -636,7 +636,7 @@ async function featureAction(action,id,el){
  if(action==='server-delete'){
   const server=currentServer?.id===id?currentServer:(await api('/servers?archive=true')).find(s=>s.id===id);
   if(!server)throw new Error('Server not found');
-  modal('Permanently delete '+server.name+'?',`<p>This deletes the server folder, including its worlds, mods, properties and schedules. Stop the server first. Existing backup files and download history are retained.</p><form data-form="delete-server"><input name="id" type="hidden" value="${esc(id)}">${field('Type the exact server name','confirm_name','','text',server.name,'required autocomplete="off"')}<div class="formactions">${button('Cancel','close-modal')}<button class="button danger">Delete permanently</button></div></form>`);return true;
+  modal('Permanently delete '+server.name+'?',`<p>This deletes the server folder, including its worlds, mods, properties and schedules. Stop the server first. Its UNM-managed DNS records are removed automatically; unavailable connections retry every five minutes. Port forwarding stays configured separately. Existing backup files and download history are retained.</p><form data-form="delete-server"><input name="id" type="hidden" value="${esc(id)}">${field('Type the exact server name','confirm_name','','text',server.name,'required autocomplete="off"')}<div class="formactions">${button('Cancel','close-modal')}<button class="button danger">Delete permanently</button></div></form>`);return true;
  }
  if(action==='image-upload'){await uploadImage(id);return true;}
  if(action==='mod-view'){modView=id;await render();return true;}

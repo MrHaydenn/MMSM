@@ -106,6 +106,7 @@ class Store:
         CREATE TABLE IF NOT EXISTS usage_hourly(server_id TEXT NOT NULL, bucket INTEGER NOT NULL,
           player_seconds REAL DEFAULT 0, rx_bytes REAL DEFAULT 0, tx_bytes REAL DEFAULT 0,
           observed_seconds REAL DEFAULT 0, peak_players INTEGER DEFAULT 0, PRIMARY KEY(server_id,bucket));
+        CREATE TABLE IF NOT EXISTS unm_dns_cleanup(id TEXT PRIMARY KEY, endpoint TEXT NOT NULL, zone TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS server_deletions(id TEXT PRIMARY KEY, original TEXT NOT NULL, tombstone TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS backup_records(id TEXT PRIMARY KEY, server_id TEXT, rule_id TEXT, path TEXT, created REAL);
         CREATE TABLE IF NOT EXISTS notification_reads(user_id TEXT, notification_id TEXT, PRIMARY KEY(user_id,notification_id));

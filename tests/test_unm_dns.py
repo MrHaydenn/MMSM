@@ -41,6 +41,39 @@ class UNMDNS(support.Base):
         self.assertEqual(self.calls,[])
         self.assertIn('previous UNM endpoint',self.store.server(self.s['id'])['dns_status'])
 
+    def test_server_deletion_removes_owned_dns_and_retries_outages(self):
+        save(self.manager, self.s['id'], dict(label='test'))
+        with patch('mmsm.domains.unm_request', side_effect=ValueError('offline')):
+            result = self.manager.delete_server(self.s['id'], self.s['name'])
+        self.assertTrue(result['deleted'])
+        self.assertIn('DNS cleanup is pending', result['warning'])
+        self.assertEqual(len(self.store.rows('SELECT * FROM unm_dns_cleanup')), 1)
+        self.store.set_settings({'dns_auto': False})
+        publish_all(self.manager)
+        self.assertEqual(self.calls[-1], (self.s['id'], None))
+        self.assertEqual(self.store.rows('SELECT * FROM unm_dns_cleanup'), [])
+
+    def test_deletion_cleanup_preserves_endpoint_scope(self):
+        save(self.manager, self.s['id'], dict(label='test'))
+        self.store.set_settings({'unm_url': 'https://other.example.com'})
+        self.calls.clear()
+        result = self.manager.delete_server(self.s['id'], self.s['name'])
+        self.assertIn('pending', result['warning'])
+        self.assertEqual(self.calls, [])
+        self.store.set_settings({'unm_url': SETTINGS['unm_url']})
+        publish_all(self.manager)
+        self.assertEqual(self.calls, [(self.s['id'], None)])
+
+    def test_delete_success_and_archive_retains_dns(self):
+        save(self.manager, self.s['id'], dict(label='test'))
+        server = self.store.server(self.s['id']); server['archived'] = True
+        self.store.save_server(server)
+        self.calls.clear(); publish_all(self.manager)
+        self.assertEqual(self.calls, [])
+        result = self.manager.delete_server(self.s['id'], self.s['name'])
+        self.assertEqual(result, {'deleted': True})
+        self.assertEqual(self.calls, [(self.s['id'], None)])
+
     def test_validation(self):
         for url in ('http://example.com','https://user:pass@example.com','https://example.com/path','https://example.com?token=secret'):
             with self.assertRaises(Problem):unm_url(url)

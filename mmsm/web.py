@@ -261,6 +261,33 @@ class Handler(BaseHTTPRequestHandler):
             store.audit(user['username'], 'Owner account created')
             self.reply({'created': True}, 201)
             return
+        if path == '/api/account-service/setup' and method == 'POST':
+            self.rate_limit()
+            from .central_identity import config, request
+            from .configure_accounts import replace_accounts
+            require(not config(store), 'The account service is already connected', 409)
+            if store.rows('SELECT id FROM users LIMIT 1'):
+                owners = store.rows("SELECT password FROM users WHERE username=? AND role='owner'", (data.get('owner_username',''),))
+                require(password_matches(data.get('owner_password',''), owners[0]['password'] if owners else store.dummy_password) and owners, 'Enter the current MMSM owner username and password', 403)
+            else:
+                require(hmac.compare_digest(str(data.get('token','')), self.server.setup_token), 'Enter the setup token printed in the MMSM terminal', 403)
+            require(data.get('confirm') is True, 'Confirm replacing the existing MMSM accounts', 400)
+            cfg = {'url':'https://accounts.mrhaydenn.us','client_id':'mmsm','key':''}
+            login = request(store,'login',{'username':data.get('username',''),'password':data.get('password',''),'audience':'accounts'},False,configuration=cfg)
+            cfg['key'] = login['token']
+            try:
+                connection = request(store,'integrations/mmsm',{},configuration=cfg)
+            finally:
+                try: request(store,'logout',{},configuration=cfg)
+                except Problem: pass
+            cfg['key'] = connection['key']
+            with store.lock:
+                require(not config(store), 'The account service is already connected', 409)
+                require(not manager.updater.installing, 'Wait for the MMSM update to finish', 409)
+                backup = replace_accounts(store,cfg,connection['user'])
+            store.audit(connection['user']['username'],'Connected shared accounts; backup '+backup.name)
+            self.reply({'connected':True,'account_service':cfg['url']})
+            return
         if path == '/api/login' and method == 'POST':
             self.rate_limit()
             user, token, csrf = store.login(data.get('username', ''), data.get('password', ''))

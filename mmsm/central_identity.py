@@ -34,6 +34,8 @@ def request(store, route, data, authenticated=True, configuration=None):
             require(len(body) <= 65536, 'Invalid account service response', 503)
             return json.loads(body)
     except HTTPError as error:
+        if error.code == 404 and route == 'integrations/mmsm':
+            raise Problem('Update Haydenn Accounts to version 0.2.4 or newer, then try again.', 503)
         raise Problem('Account sign-in expired, disabled, or access denied' if error.code in (401, 403) else 'Account service unavailable', 401 if error.code in (401, 403) else 503)
     except (URLError, OSError, ValueError):
         raise Problem('Account service unavailable. Try again when it is online.', 503)

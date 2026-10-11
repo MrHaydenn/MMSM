@@ -76,23 +76,21 @@ The launcher signs into the same account and keeps its existing server permissio
 
 ## Haydenn shared accounts
 
-Install the Experimental update containing this integration, then **stop MMSM**.
-In a terminal in the MMSM folder, run:
+Update Haydenn Accounts to **0.2.4 or newer**, then install MMSM's Experimental update.
+On the MMSM sign-in screen, choose **Connect Haydenn Accounts**.
+Enter the current MMSM owner's login and your shared administrator's login.
+For a fresh MMSM installation, use the setup token printed at startup instead
+of an existing owner login. Confirm the account replacement and click Connect.
+No files, copied client keys, commands or MMSM restart are needed.
 
-```powershell
-py -3.12 -m mmsm.configure_accounts
-```
+The service verifies both logins, obtains a dedicated MMSM integration credential,
+backs up mmsm.sqlite3, removes the old local accounts/sessions and assigns your
+shared identity as this MMSM instance's owner. Worlds and settings are retained.
+The dedicated credential stops working if its administrator is disabled, loses
+administrator status or loses MMSM membership. Configuration is saved privately
+by MMSM; keep the data folder and database backups private.
 
-For a custom data folder, append `--data "D:/MMSM-data"`.
-The command connects to https://accounts.mrhaydenn.us and prompts privately for
-`clients.mmsm` from the account server's config.json and your shared administrator
-credentials. Enable the **mmsm** application membership on that account first.
-It verifies both credentials and client key, backs up mmsm.sqlite3,
-removes existing local accounts/sessions and assigns the chosen shared identity
-as this MMSM instance's owner. Worlds, server settings and backups are retained.
-Keep data/account-service.json and the database backup private.
-
-Restart with start.bat and use your shared username/password. New shared users
+Use your shared username/password to sign in. New shared users
 with mmsm membership can sign in, but start as viewers with **no server access**.
 The owner grants roles, server scopes and permissions under Settings → Accounts.
 Create identities and change credentials at the account service. Disabling an

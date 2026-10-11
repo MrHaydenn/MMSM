@@ -1,4 +1,4 @@
-let sharedAccounts=null;
+let sharedAccounts=null,authSetup=false;
 'use strict';
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -64,7 +64,7 @@ async function api(path, method = 'GET', body, unlinkSync = false) {
  const data = await response.json();
  if(response.status===409 && !unlinkSync && data.error?.startsWith('SYNC_CONFLICT:') && confirm(data.error.slice(14)))return api(path,method,body,true);
  if(response.status===409 && path==='/servers' && !body?.allow_port_conflict && data.error?.startsWith('PORT_CONFLICT:') && confirm(data.error.slice(14)))return api(path,method,{...body,allow_port_conflict:true});
- if (!response.ok) { if (response.status === 401 && path !== '/login') { user = null; showAuth(false); } const error=new Error(data.error || 'Request failed');error.status=response.status;throw error; }
+ if (!response.ok) { if (response.status === 401 && path !== '/login' && path !== '/account-service/setup') { user = null; showAuth(false); } const error=new Error(data.error || 'Request failed');error.status=response.status;throw error; }
  return data;
 }
 function toast(message, error = false) { clearTimeout(toastTimer); const el = $('#toast'); el.textContent = message; el.className = 'show' + (error ? ' error' : ''); toastTimer = setTimeout(() => {el.className = '';}, error ? 10000 : 5000); }
@@ -74,8 +74,12 @@ const serverImage=s=>s.icon?`<img class="server-image" src="/api/servers/${s.id}
 const brand = () => `<div class="brand"><div class="brandmark">${appearance.logo?'<img src="/api/assets/logo?v='+encodeURIComponent(appearance.logo_revision||'default')+'" alt="MMSM logo">':icon('cube')}</div><div>MMSM</div></div>`;
 const button = (label, action, id='', cls='', ico='') => controlPermission[action]&&!allowed(controlPermission[action],permissionServers.get(id)||currentServer)?'':`<button type="button" class="button ${cls} ${action==='server-stop'?'control-stop':action==='server-restart'?'control-restart':action==='server-kill'?'control-kill':''}" data-action="${action}" ${id ? `data-id="${esc(id)}"` : ''}>${ico ? icon(ico) : ''}${esc(label)}</button>`;
 function showAuth(setup) {
+ authSetup=setup;
  routeEpoch++; closePopover(false); $('#modal').close();
- $('#app').innerHTML = `<main class="auth"><div class="authbox">${brand()}<div class="panel"><div class="eyebrow">${setup ? 'Make yourself at home' : 'Welcome back'}</div><h1>${setup ? 'Your server room starts here.' : 'Sign in to your server room.'}</h1><p>${setup ? 'Create the owner account for this MMSM installation. Only the owner can add accounts after setup.' : 'Your worlds, players, and everything in between.'}</p><form data-form="${setup ? 'setup' : 'login'}">${setup ? field('Setup token','token','','text','Copy the token from the MMSM terminal.') : ''}${field('Username','username','','text','Capitalization is preserved; sign-in is case-insensitive.')}${field('Password','password','','password','')}<div id="autherror"></div><button class="button primary" type="submit">${setup ? 'Create owner account' : 'Sign in'} ${icon('arrow')}</button></form></div><p class="authfooter">MrHaydenn’s Minecraft Server Manager<br>Built for the worlds you call home.</p></div></main>`;
+ $('#app').innerHTML = `<main class="auth"><div class="authbox">${brand()}<div class="panel"><div class="eyebrow">${setup ? 'Make yourself at home' : 'Welcome back'}</div><h1>${setup ? 'Your server room starts here.' : 'Sign in to your server room.'}</h1><p>${setup ? 'Create the owner account for this MMSM installation. Only the owner can add accounts after setup.' : 'Your worlds, players, and everything in between.'}</p><form data-form="${setup ? 'setup' : 'login'}">${setup ? field('Setup token','token','','text','Copy the token from the MMSM terminal.') : ''}${field('Username','username','','text','Capitalization is preserved; sign-in is case-insensitive.')}${field('Password','password','','password','')}<div id="autherror"></div><button class="button primary" type="submit">${setup ? 'Create owner account' : 'Sign in'} ${icon('arrow')}</button></form>${!sharedAccounts?'<div class="divider"></div>'+button('Connect Haydenn Accounts','connect-accounts'):''}</div><p class="authfooter">MrHaydenn’s Minecraft Server Manager<br>Built for the worlds you call home.</p></div></main>`;
+}
+function accountServiceSetup() {
+ $('#app').innerHTML=`<main class="auth"><div class="authbox">${brand()}<div class="panel"><div class="eyebrow">ONE ACCOUNT FOR YOUR APPLICATIONS</div><h1>Connect Haydenn Accounts</h1><p>Connect this server manager to accounts.mrhaydenn.us.</p><form data-form="connect-accounts"><h3>Verify this MMSM installation</h3>${authSetup?field('Setup token','token','','text','Copy the token printed in the MMSM terminal.','required'):field('Current MMSM owner username','owner_username','','text','','required')+field('Current MMSM owner password','owner_password','','password','','required')}<h3>Your Haydenn Accounts administrator</h3>${field('Shared username','username','','text','','required')}${field('Shared password','password','','password','This account needs administrator status and MMSM access.','required')}<label class="check"><input name="confirm" type="checkbox" required> Back up and replace the existing MMSM accounts. Keep worlds and server settings.</label><div id="autherror"></div><div class="formactions"><button class="button primary" type="submit">Connect account service</button>${button('Back to sign in','cancel-connect-accounts')}</div></form></div></div></main>`;
 }
 function field(label,name,value='',type='text',hint='',extra='') { return `<div class="field"><label for="f-${esc(name)}">${esc(label)}</label><input id="f-${esc(name)}" name="${esc(name)}" type="${type}" value="${esc(value)}" ${type === 'password' ? 'autocomplete="current-password"' : ''} ${extra}>${hint ? `<small>${esc(hint)}</small>` : ''}</div>`; }
 function selectField(label,name,options,value,extra='') { return `<div class="field"><label for="f-${name}">${esc(label)}</label><select id="f-${name}" name="${name}" ${extra}>${options.map(o => {const [v,l] = Array.isArray(o) ? o : [o,o]; return `<option value="${esc(v)}" ${v === value ? 'selected' : ''}>${esc(l)}</option>`;}).join('')}</select></div>`; }
@@ -455,6 +459,8 @@ async function perform(action,id,el) {
  if(action==='close-popup'){closePopover();return;}
  if(action==='downloads-popup'||action==='notifications-popup'){openPopover(action.split('-')[0]);await activityPoll();return;}
  if(action==='download-dismiss'||action==='downloads-clear'){await api('/downloads/dismiss','POST',action==='download-dismiss'?{id}:{});await activityPoll();return;}
+ if(action==='connect-accounts'){accountServiceSetup();return;}
+ if(action==='cancel-connect-accounts'){showAuth(authSetup);return;}
  if(action==='logout'){try{await api('/logout','POST',{});}catch(e){if(e.status!==401)throw e;}csrf=null;user=null;resetActivity();showAuth(false);return;}
  if(action==='account-settings'){accountSettingsModal();return;}
  if(action==='launcher-connections'){await launcherConnectionsModal();return;}
@@ -557,6 +563,7 @@ document.addEventListener('submit',async e=>{
  try{
   const kind=form.dataset.form;
   if(await featureSubmit(kind,data,form))return;
+  if(kind==='connect-accounts'){const result=await api('/account-service/setup','POST',{...data,confirm:data.confirm==='on'});sharedAccounts=result.account_service;showAuth(false);toast('Connected. Sign in with your Haydenn Accounts login.');return;}
   if(kind==='login'||kind==='setup'){
    if(kind==='setup')await api('/setup','POST',data);
    const result=await api('/login','POST',{username:data.username,password:data.password});user=(await api('/me')).user;csrf=result.csrf;appearance=await api('/appearance');refreshFavicon();resetActivity();await navigate('dashboard');void activityPoll();return;

@@ -468,3 +468,11 @@ test('shared account settings link credentials to the identity service and omit 
  h.run("api=async()=>[];");await h.run("accountModal({id:'member',username:'Member',role:'viewer',server_ids:[]})");
  assert.doesNotMatch(h.elements.get('#modal').innerHTML,/name="password"/);
 });
+
+
+test('guided shared account setup is available from sign-in without a client key',()=>{
+ const h=harness();h.run('showAuth(false)');assert.match(h.elements.get('#app').innerHTML,/Connect Haydenn Accounts/);
+ h.run('accountServiceSetup()');const html=h.elements.get('#app').innerHTML;
+ assert.match(html,/name="owner_password"/);assert.match(html,/name="confirm"/);assert.doesNotMatch(html,/name="key"/);
+ h.run('sharedAccounts="https://accounts.mrhaydenn.us";showAuth(false)');assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-action="connect-accounts"/);
+});

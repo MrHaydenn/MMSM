@@ -264,7 +264,10 @@ class Handler(BaseHTTPRequestHandler):
             user, token, csrf = store.login(data.get('username', ''), data.get('password', ''))
             self.reply({'user': user, 'csrf': csrf}, headers={'Set-Cookie': self.session_cookie_header(token)})
             return
+        from .launcher import public_route, account_route
+        if public_route(self): return
         self.authenticate()
+        if account_route(self): return
         enforce_scope(self)
         require(method=='GET' or not manager.updater.installing, 'MMSM update in progress',409)
         if len(self.parts) == 4 and self.parts[:2] == ['api', 'servers'] and method != 'GET' and self.parts[3] in ('files', 'mods-install', 'mods-toggle', 'pack-install', 'project-install', 'update', 'sync-edit'):
@@ -298,6 +301,8 @@ class Handler(BaseHTTPRequestHandler):
             require(password_matches(data.get('current', ''), row['password']), 'Current password is incorrect', 403)
             store.execute('UPDATE users SET password=? WHERE id=?', (password_hash(data.get('password', '')), self.user['id']))
             store.execute('DELETE FROM sessions WHERE user_id=?', (self.user['id'],))
+            from .launcher import revoke_user
+            revoke_user(store,self.user['id'])
             self.reply({'changed': True},headers={'Set-Cookie':self.session_cookie_header(expire=True,name=self.session_cookie)}); return
         if path == '/api/dashboard' and method == 'GET': self.reply(manager.dashboard(scope(self))); return
         if path == '/api/history' and method == 'GET':
@@ -441,6 +446,8 @@ class Handler(BaseHTTPRequestHandler):
                 permissions=validate_policy(store,data['permissions']) if 'permissions' in data else rows[0]['permissions']
                 store.execute('UPDATE users SET role=?,password=?,server_ids=?,permissions=? WHERE id=?', (role, hashed, selected, permissions, uid))
             store.execute('DELETE FROM sessions WHERE user_id=?', (uid,))
+            from .launcher import revoke_user
+            revoke_user(store,uid)
             store.audit(self.user['username'], method + ' account ' + rows[0]['username'])
             self.reply({'ok': True}); return
         if path == '/api/audit' and method == 'GET':

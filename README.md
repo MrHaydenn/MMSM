@@ -67,3 +67,9 @@ node --test tests/ui.test.cjs
 Node and a Java compiler are needed for the development checks; they are not required to launch the manager. Java process tests use a test fixture, not a real modded Minecraft distribution. See [verification](docs/VERIFICATION.md) and [publishing updates](docs/RELEASING.md). Ordinary pushes publish only opt-in Experimental builds; stable releases require an explicit release request.
 
 Wrapper Settings groups General, Archived servers and owner-only Accounts. The Overview replaces the separate Servers page. Non-administrators can use the archive section for servers visible to their account; global settings remain restricted, and restoring/deleting a server requires its specific permission. Only the owner can list, create, edit or delete accounts. Passwords no longer have a 12-character minimum, but must be nonempty and at most 256 characters. A saved UNM token is indicated without revealing its value. Launcher images can be removed to restore the default logo and favicon.
+
+## MML launcher connections
+
+Sign into MMSM in your browser, click your profile, and open **Launcher connections**. Generate a one-use token, then paste the instance URL and token into MML. Tokens expire after ten minutes; generating a new token replaces the previous unused token for your account.
+
+The launcher signs into the same account and keeps its existing server permissions. Connections expire after 30 days and can be revoked individually from your profile. Revocation, password changes, and account deletion invalidate linked launcher sessions. Only your normal browser session can generate new pairing tokens; a connected launcher cannot mint additional credentials. Pairing and connection secrets are stored hashed on the server. MML encrypts its saved connection credential using Windows credential protection.

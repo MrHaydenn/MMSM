@@ -121,6 +121,8 @@ class Store:
                             (json.dumps(GITHUB_UPDATE_FEED), json.dumps('')))
             self.db.execute("INSERT INTO settings(key,value) VALUES('_github_feed_migrated','true')")
         self.db.commit()
+        from .launcher import initialize
+        initialize(self)
         with contextlib.suppress(OSError):
             os.chmod(self.root, 0o700)
             os.chmod(self.root / 'mmsm.sqlite3', 0o600)
@@ -184,7 +186,7 @@ class Store:
         require(password_matches(password, candidate) and rows, 'Invalid username or password', 401)
         user = {k: rows[0][k] for k in ('id', 'username', 'role')}
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
-        self.execute('INSERT INTO sessions VALUES(?,?,?,?)', (hashlib.sha256(token.encode()).hexdigest(), user['id'], csrf, time.time() + 86400))
+        self.execute('INSERT INTO sessions(token,user_id,csrf,expires) VALUES(?,?,?,?)', (hashlib.sha256(token.encode()).hexdigest(), user['id'], csrf, time.time() + 86400))
         return user, token, csrf
 
     def session(self, token):

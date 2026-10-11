@@ -369,7 +369,273 @@ function reconcileDownloads(rows) {
  rows.forEach(d=>seenDownloadIds.add(d.id));
  if(seenDownloadIds.size>12000)seenDownloadIds=new Set(rows.map(d=>d.id));
  downloadRows=rows;
- const act…6514 tokens truncated…s="formgrid">${field('Minecraft username','name','','text','','required pattern="[A-Za-z0-9_]{1,16}"')}${selectField('Action','action',[['whitelist','Whitelist'],['unwhitelist','Remove whitelist'],['ban','Ban'],['pardon','Unban'],['op','Make operator'],['deop','Remove operator']],'whitelist')}</div><button class="button primary">Apply action</button><p class="smalltext">When running, Minecraft processes the command. When stopped, MMSM updates the player lists. Online-mode servers verify new usernames with Mojang.</p></form>`:''}${[['Online',p=>p.online],['Whitelisted',p=>p.whitelisted],['Banned',p=>p.banned],['Known players',()=>true]].map(([label,filter])=>`<section class="panel"><h2>${label}</h2>${rows.filter(filter).map(card).join('')||'<p>No players in this section.</p>'}</section>`).join('')}`;
+ const active=rows.some(d=>['queued','downloading'].includes(d.status))||pendingInstallServers.size>0;
+ if(newRows.length&&!downloadsSuppressed&&!popoverKind&&!$('#modal').open)openPopover('downloads',true);
+ if(popoverKind==='downloads')renderPopover();
+ if(active){clearTimeout(downloadCloseTimer);downloadCloseTimer=null;}
+ else {
+  downloadsSuppressed=false;
+  if(popoverKind==='downloads'&&popoverAutomatic&&!downloadCloseTimer)downloadCloseTimer=setTimeout(()=>{
+   downloadCloseTimer=null;
+   if(popoverKind==='downloads'&&popoverAutomatic&&!pendingInstallServers.size&&!downloadRows.some(d=>['queued','downloading'].includes(d.status)))closePopover(false);
+  },1600);
+ }
+ updateActivityBadges();
+}
+async function activityPoll() {
+ if(!user||activityPolling)return;
+ activityPolling=true;
+ try {
+  const accountId=user.id;
+  const requests=[api('/notifications'),operator()?api('/downloads'):Promise.resolve([]),pendingInstallServers.size?api('/servers'):Promise.resolve(null)];
+  const [notes,downloads,servers]=await Promise.all(requests);
+  if(!user||user.id!==accountId)return;
+  notificationRows=notes;
+  if(servers)for(const id of pendingInstallServers){const s=servers.find(s=>s.id===id);if(!s||!['installing','updating'].includes(s.status))pendingInstallServers.delete(id);}
+  reconcileDownloads(downloads);
+  if(popoverKind==='notifications')renderPopover();
+  updateActivityBadges();
+ }catch(e){console.debug('Activity refresh:',e.message);}finally{activityPolling=false;}
+}
+function beginInstall(serverId) {
+ pendingInstallServers.add(serverId);
+ downloadsSuppressed=false;
+ openPopover('downloads',true);
+ void activityPoll();
+}
+async function queueModInstall(versionId, type='mod') {
+ const serverId=sid;
+ await api('/servers/'+serverId+(type==='modpack'?'/pack-install':'/mods-install'),'POST',{version_id:versionId});
+ beginInstall(serverId);
+ toast('Installation started. Progress is in Downloads.');
+}
+async function uploadFiles(files,mods=false) {
+ if(!files.length)return;
+ const requestedSid=sid, directory=filePath, epoch=routeEpoch;
+ const progress=$('#upload-progress'),buttonEl=document.querySelector(mods?'[data-action="mod-upload"]':'[data-action="file-upload"]');
+ if(buttonEl)buttonEl.disabled=true;
+ try {
+  await api('/servers/'+requestedSid+'/sync-edit','POST',{resource:mods?'mods':'files',paths:files.map(file=>[directory,file.name].filter(Boolean).join('/'))});
+  for(let i=0;i<files.length;i++) {
+   const file=files[i];if(file.size>512*1024**2)throw new Error(file.name+' exceeds the 512 MB upload limit.');
+   const path=[directory,file.name].filter(Boolean).join('/');
+   await new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST','/api/servers/'+requestedSid+(mods?'/mods-upload?name='+encodeURIComponent(file.name):'/upload?path='+encodeURIComponent(path)));
+    xhr.setRequestHeader('Content-Type','application/octet-stream');xhr.setRequestHeader('X-CSRF-Token',csrf);
+    xhr.upload.onprogress=e=>{if(progress&&epoch===routeEpoch)progress.textContent=`Uploading ${file.name} (${i+1}/${files.length}) — ${e.lengthComputable?Math.round(e.loaded/e.total*100)+'%':bytes(e.loaded)}`;};
+    xhr.onload=()=>{let result;try{result=JSON.parse(xhr.responseText);}catch{result={error:'Upload failed'};}if(xhr.status>=200&&xhr.status<300)resolve(result);else reject(new Error(result.error));};
+    xhr.onerror=()=>reject(new Error('Upload connection failed'));xhr.onabort=()=>reject(new Error('Upload cancelled'));
+    xhr.send(file);
+   });
+  }
+  toast(files.length+' file'+(files.length===1?'':'s')+' uploaded');
+  if(epoch===routeEpoch)await render();
+ }catch(e){toast(e.message,true);if(progress)progress.textContent=e.message;}
+ finally{if(buttonEl)buttonEl.disabled=false;}
+}
+
+async function perform(action,id,el) {
+ if(await featureAction(action,id,el))return;
+ if(action==='sync-now'){await api('/servers/'+sid+'/sync-now','POST',{});await render();return;}
+ if(action==='go-settings'){closePopover();settingsSection='general';await navigate('settings');return;}
+ if(action==='settings-section'){settingsSection=id;await navigate('settings');return;}
+ if(action==='logo-reset'){await api('/assets/logo','DELETE');appearance=await api('/appearance');refreshFavicon();await navigate('settings');toast('Default image restored');return;}
+ if(action==='unm-test'){const status=await api('/unm-connection/test','POST',{});$('#unm-connection-status').textContent=status.message;return;}
+ if(action==='wrapper-check'){const state=await api('/wrapper-update/check','POST',{});$('#wrapper-update-status').textContent=wrapperUpdateText(state);if($('#wrapper-install'))$('#wrapper-install').disabled=state.status!=='available';return;}
+ if(action==='wrapper-install'){await api('/wrapper-update/install','POST',{});toast('Update verified. MMSM is restarting…');waitForManager();return;}
+ if(action==='console-scroll'){consoleAutoScroll=!consoleAutoScroll;el.textContent='Auto-scroll: '+(consoleAutoScroll?'on':'off');el.setAttribute('aria-pressed',String(consoleAutoScroll));if(consoleAutoScroll&&$('#console'))$('#console').scrollTop=$('#console').scrollHeight;return;}
+ if(action==='copy-error'){await copyErrorLogs(id);return;}
+ if(action==='folder-delete'){confirmation('Delete this folder?',id+' and all its contents will be removed. A recovery copy is kept in backups.','Delete folder','confirm-folder-delete',id);return;}
+ if(action==='confirm-folder-delete'){const result=await api('/servers/'+sid+'/files','DELETE',{path:id,directory:true});$('#modal').close();toast('Folder deleted. Recovery copy: '+result.backup);await render();return;}
+ if(action==='installed-versions'){const m=currentServer.mods.find(m=>m.project_id===id);await projectVersionsModal({project_id:id,title:m.name,installedSource:true},{sid,type:currentServer.loader==='paper'?'plugin':'mod'});return;}
+ if(action==='close-modal'){$('#modal').close();return;}
+ if(action==='close-popup'){closePopover();return;}
+ if(action==='downloads-popup'||action==='notifications-popup'){openPopover(action.split('-')[0]);await activityPoll();return;}
+ if(action==='download-dismiss'||action==='downloads-clear'){await api('/downloads/dismiss','POST',action==='download-dismiss'?{id}:{});await activityPoll();return;}
+ if(action==='logout'){try{await api('/logout','POST',{});}catch(e){if(e.status!==401)throw e;}csrf=null;user=null;resetActivity();showAuth(false);return;}
+ if(action==='account-settings'){accountSettingsModal();return;}
+ if(action==='launcher-connections'){await launcherConnectionsModal();return;}
+ if(action==='launcher-generate'){const pairing=await api('/launcher/pairings','POST',{});modal('Connect MML',`<p>In MML, choose Connect an MMSM instance and paste this URL and token.</p>${field('MMSM public URL','instance_url',pairing.instance_url,'text','','readonly')}${field('One-use connection token','pairing_token',pairing.token,'text','Expires in 10 minutes. Only share this token with your MML app.','readonly')}<p>The launcher receives your existing account permissions. You can revoke it from Launcher connections.</p>${button('Back to connections','launcher-connections')}`);return;}
+ if(action==='launcher-revoke'){await api('/launcher/connections/'+encodeURIComponent(id),'DELETE',{});await launcherConnectionsModal();toast('Launcher disconnected');return;}
+ if(action==='retry'){await navigate(route,sid,tab);return;}
+ if(action==='back'){await navigate('dashboard');return;}
+ if(action==='go-archive'){await navigate('archive');return;}
+ if(action==='open-server'){await navigate('server',id);return;}
+ if(action==='new-server'){await serverModal();return;}
+ if(action==='update-runtime'){await serverModal(true);return;}
+ if(action==='retry-catalog'){await loadCatalog($('#f-loader').value);return;}
+ if(action==='new-account'){await accountModal();return;}
+ if(action==='edit-account'){await accountModal(JSON.parse(id));return;}
+ if(action==='delete-account'){confirmation('Delete account?','This revokes the account’s sessions and removes access.','Delete account','confirm-delete-account',id);return;}
+ if(action==='confirm-delete-account'){await api('/users/'+id,'DELETE',{});$('#modal').close();toast('Account deleted');await render();return;}
+ if(action==='notifications-read'){await api('/notifications/read','POST',{});await activityPoll();return;}
+ if(action==='file-open'){const previous=filePath;filePath=el.dataset.path??id??'';try{await render();}catch(e){filePath=previous;throw e;}return;}
+ if(action==='mod-upload'){$('#mod-upload-input').click();return;}
+ if(action==='file-upload'){$('#file-upload-input').click();return;}
+ if(action==='file-delete'){confirmation('Delete this file?',id+' will be removed from the server. A recovery copy is kept in backups.','Delete file','confirm-file-delete',id);return;}
+ if(action==='confirm-file-delete'){
+  const result=await api('/servers/'+sid+'/files','DELETE',{path:id});$('#modal').close();
+  if(filePath===id)filePath=id.split('/').slice(0,-1).join('/');
+  toast('File deleted. Recovery copy: '+result.backup);await render();return;
+ }
+ if(action==='mod-page'){await searchMods(null,Math.max(0,Number(id)));return;}
+ if(action==='mod-retry'){await searchMods(null,modSearch?.page||0);return;}
+ if(action==='mod-versions'){const project=modSearch.hits.find(p=>p.project_id===id);await projectVersionsModal(project);return;}
+ if(action==='mod-version-install'){const data=JSON.parse(id);await installProject(data.project_id,data.type,data.version_id,data.server_id);return;}
+ if(action==='mod-card-install'){
+  const project=modSearch.hits.find(p=>p.project_id===id);
+  await installProject(project.project_id,modSearch.type);project.installing=true;
+  const el=document.querySelector(`[data-install="${CSS.escape(id)}"]`);if(el)el.innerHTML=modVersionControl(project);return;
+ }
+ if(action==='install-version'){await queueModInstall(id);return;}
+ if(action==='toggle-mod'){const m=currentServer.mods.find(m=>m.project_id===id);await api('/servers/'+sid+'/mods-toggle','POST',{project_id:id,enabled:!m.enabled});toast('Project '+(m.enabled?'disabled':'enabled'));await refreshServerPanels();return;}
+ if(action==='check-updates'){const result=await api('/servers/'+id+'/check-updates','POST',{});toast(result.updates.length+' compatible updates found');await refreshServerPanels();return;}
+ if(action==='server-kill'){confirmation('Kill the server process?','This immediately terminates Java without saving the world. Unsaved changes may be lost. Use this if normal Stop is stuck.','Kill process','confirm-server-kill',id);return;}
+ if(action==='confirm-server-kill'){await api('/servers/'+id+'/kill','POST',{});$('#modal').close();toast('Server process killed');await refreshServerPanels();return;}
+ if(action==='server-archive'){confirmation('Archive this server?','The server will stay dormant until you unarchive it.','Archive','confirm-server-archive',id);return;}
+ if(action==='confirm-server-archive'){await api('/servers/'+id+'/archive','POST',{});$('#modal').close();toast('Server archived');await navigate('archive');return;}
+ if(action.startsWith('server-')){
+  const cmd=action.slice(7);
+  const statusBar=$('.detailmeta [role="status"]');if(statusBar)statusBar.innerHTML=statusDot({status:{stop:'stopping',start:'starting',restart:'stopping',sleep:'stopping'}[cmd]||currentServer?.status||'stopped'})+({stop:'Stopping — saving the world…',start:'Starting server…',restart:'Restart requested…',sleep:'Putting server to sleep…'}[cmd]||'Working…');
+  const result=await api('/servers/'+id+'/'+cmd,'POST',{});
+  if(result.stop_requested){toast('Stop requested; current operation will finish without restarting.');await refreshServerPanels();return;}
+  toast({start:'Server starting',stop:'Server stopped',sleep:'Server is sleeping. Its selected wake mode is active.',unarchive:'Server restored'}[cmd]||'Done');
+  if(route==='server')await refreshServerPanels();else await render();
+ }
+}
+function resetActivity() {
+ permissionServers.clear();
+ closePopover(false);downloadRows=[];notificationRows=[];seenDownloadIds=null;pendingInstallServers.clear();downloadsSuppressed=false;
+}
+document.addEventListener('click',async e=>{
+ const el=e.target.closest('button');
+ const card=e.target.closest('[data-server-card]');
+ if(!el&&card&&!e.target.closest('a,input,select,textarea')){await navigate('server',card.dataset.serverCard);return;}
+ if(popoverKind&&!e.target.closest('#activity-popover')&&!el?.classList.contains('activity-trigger'))closePopover();
+ if(!el||el.disabled)return;
+ if(el.dataset.route){await navigate(el.dataset.route);return;}
+ if(el.dataset.tab){tab=el.dataset.tab;routeEpoch++;try{await render();}catch(err){toast(err.message,true);}return;}
+ if(!el.dataset.action)return;
+ el.disabled=true;
+ try{await perform(el.dataset.action,el.dataset.id,el);}catch(err){if($('#modal').open&&$('#modalerror'))$('#modalerror').innerHTML=`<div class="errorbox">${esc(err.message)}</div>`;else toast(err.message,true);}finally{el.disabled=false;}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&popoverKind)closePopover();if((e.key==='Enter'||e.key===' ')&&e.target.matches?.('[data-server-card]')){e.preventDefault();void navigate('server',e.target.dataset.serverCard);}});
+document.addEventListener('error',e=>{
+ if(e.target.tagName==='IMG'&&e.target.closest('.player-head')){e.target.parentElement.textContent='?';return;}
+ if(e.target.tagName==='IMG'&&e.target.closest('.project-icon'))e.target.parentElement.innerHTML=icon('cube');
+},true);
+document.addEventListener('change',async e=>{
+ if(e.target.name?.startsWith('perm_')){const form=e.target.closest('form');if(e.target.name.startsWith('perm_default_'))form.querySelector('[name=custom_permissions]').checked=true;else {const override=e.target.closest('.permission-server')?.querySelector('[name^=override_]');if(override)override.checked=true;}}
+ if(e.target.name==='role'&&e.target.closest('form')?.dataset.form==='account'){const form=e.target.closest('form');if(!form.querySelector('[name=custom_permissions]').checked){const defaults=permissionDefaults(e.target.value);for(const [key,value] of Object.entries(defaults)){const input=form.querySelector('[name=perm_default_'+key+']');if(input)input.checked=value;}}}
+ if(e.target.name==='source_id'&&e.target.closest('[data-form="create-server"]')){const source=(await api('/servers')).find(x=>x.id===e.target.value);if(source){const f=e.target.form;f.elements.loader.value=source.loader;f.elements.memory_gb.value=source.memory_mb/1024;await loadCatalog(source.loader,source.minecraft,source.loader_version);}return;}
+ if(e.target.name==='dns_provider'){
+  for(const fields of e.target.form.querySelectorAll('[data-dns-fields]'))fields.hidden=fields.dataset.dnsFields!==e.target.value;
+  return;
+ }
+ if(e.target.id==='mod-upload-input'){await uploadFiles(Array.from(e.target.files),true);return;}
+ if(e.target.dataset?.modToggle){
+  const input=e.target,enabled=input.checked,serverId=sid;input.disabled=true;
+  try{await api('/servers/'+serverId+'/mods-toggle','POST',{project_id:input.dataset.modToggle,enabled});if(sid===serverId)await refreshServerPanels();}
+  catch(error){input.checked=!enabled;toast(error.message,true);}finally{input.disabled=false;}
+  return;
+ }
+
+ if(e.target.name==='server_access'&&!e.target.checked)e.target.closest('form').querySelector('[name=all_servers]').checked=false;
+ if(e.target.name==='all_servers'&&e.target.checked)e.target.closest('form').querySelectorAll('[name=server_access]').forEach(el=>el.checked=true);
+ if(e.target.id==='file-upload-input'){await uploadFiles(Array.from(e.target.files));return;}
+ if(!$('#modal').open)return;
+ if(e.target.name==='experimental')await loadCatalog($('#f-loader').value,$('#f-minecraft').value);
+ if(e.target.name==='loader')await loadCatalog(e.target.value);
+ if(e.target.name==='minecraft')await loadCatalog($('#f-loader').value,e.target.value,null,true);
+});
+document.addEventListener('submit',async e=>{
+ const form=e.target; if(!form.dataset.form)return; e.preventDefault();
+ const btn=form.querySelector('button[type="submit"],button:not([type])'),data=Object.fromEntries(new FormData(form));if(btn)btn.disabled=true;
+ try{
+  const kind=form.dataset.form;
+  if(await featureSubmit(kind,data,form))return;
+  if(kind==='login'||kind==='setup'){
+   if(kind==='setup')await api('/setup','POST',data);
+   const result=await api('/login','POST',{username:data.username,password:data.password});user=(await api('/me')).user;csrf=result.csrf;appearance=await api('/appearance');refreshFavicon();resetActivity();await navigate('dashboard');void activityPoll();return;
+  }
+  if(kind==='create-server'){
+   const body={...data,port:data.port?Number(data.port):null,memory_mb:memoryToMB(data.memory_gb),sleep:data.sleep==='on'};delete body.memory_gb;
+   const result=await api('/servers','POST',body);$('#modal').close();toast('Server created. Runtime installation is in progress.');await navigate('server',result.id);beginInstall(result.id);return;
+  }
+  if(kind==='update-runtime'){await api('/servers/'+sid+'/update','POST',{minecraft:data.minecraft,loader_version:data.loader_version});$('#modal').close();beginInstall(sid);toast('Backup and update queued');await render();return;}
+  if(kind==='command'){await api('/servers/'+sid+'/command','POST',data);form.reset();toast('Command sent');return;}
+  if(kind==='server-config'){const body={...data,memory_mb:memoryToMB(data.memory_gb),idle_minutes:Number(data.idle_minutes),sleep:data.sleep==='on',autostart:data.autostart==='on'};delete body.memory_gb;await api('/servers/'+sid+'/configure','PUT',body);toast('Server settings saved');await render();return;}
+  if(kind==='sync-rule'){
+   const source=data.source_id;
+   if(source&&!confirm('Replace the selected destination folders with the source contents, including deletions? A previous copy is retained.'))return;
+   await api('/servers/'+sid+'/syncs','PUT',{source_id:source,folders:data.folders.split(',').map(x=>x.trim()).filter(Boolean),runtime:data.runtime==='on',confirm:true});await render();return;
+  }
+  if(kind==='server-address'){await api('/servers/'+sid+'/address','PUT',data);await render();return;}
+  if(kind==='properties'){await api('/servers/'+sid+'/properties','PUT',{values:data});toast('Server properties saved');return;}
+  if(kind==='edit-file'){await api('/servers/'+sid+'/files','PUT',{path:filePath,content:data.content});toast('File saved');return;}
+  if(kind==='search-mods'){await searchMods(form,0);return;}
+  if(kind==='settings'){
+   data.default_memory_mb=memoryToMB(data.default_memory_gb);delete data.default_memory_gb;
+   for(const k of ['default_port_min','default_port_max','web_port','idle_minutes','retention_days','update_interval_hours'])data[k]=Number(data[k]);data.default_sleep=data.default_sleep==='on';data.auto_eula=data.auto_eula==='on';data.wrapper_update_checks=data.wrapper_update_checks==='on';data.dns_auto=data.dns_auto==='on';data.unm_tunnel_enabled=data.unm_tunnel_enabled==='on';for(const k of ['unm_ssh_port','unm_local_port'])if(data[k]!==undefined)data[k]=Number(data[k]);
+   const result=await api('/settings','PUT',data);settings=await api('/settings');if($('#unm-token-state'))$('#unm-token-state').textContent=settings.unm_token_saved?'Integration token saved':'No integration token saved';if($('#wrapper-install'))$('#wrapper-install').disabled=true;if($('#wrapper-update-status'))$('#wrapper-update-status').textContent='Settings saved. Check for updates to refresh availability.';refreshTheme();toast(result.restart_required?'Settings saved. Restart MMSM to apply the network settings.':'Settings saved');return;
+  }
+  if(kind==='account'){data.permissions=readAccountPermissions(form);for(const k of Object.keys(data))if(k==='create_servers'||k==='custom_permissions'||k.startsWith('perm_')||k.startsWith('override_'))delete data[k];data.server_ids=data.all_servers==='on'?null:Array.from(form.querySelectorAll('[name=server_access]:checked')).map(el=>el.value);delete data.all_servers;delete data.server_access;const id=data.id;delete data.id;await api(id?'/users/'+id:'/users',id?'PUT':'POST',data);$('#modal').close();toast('Account saved');await render();return;}
+  if(kind==='username'){await api('/username','POST',data);user=(await api('/me')).user;$('#modal').close();await navigate(route,sid,tab);toast('Username changed');return;}
+  if(kind==='password'){await api('/password','POST',data);user=null;csrf=null;resetActivity();showAuth(false);toast('Password changed. Please sign in again.');return;}
+ }catch(err){if(form.closest('dialog')&&$('#modalerror'))$('#modalerror').innerHTML=`<div class="errorbox">${esc(err.message)}</div>`;else if($('#autherror'))$('#autherror').innerHTML=`<div class="errorbox">${esc(err.message)}</div>`;else toast(err.message,true);}finally{if(btn)btn.disabled=false;}
+});
+async function refreshServerPanels() {
+ if(route!=='server')return;
+ const epoch=routeEpoch,requestedSid=sid;
+ const s=await api('/servers/'+requestedSid);if(epoch!==routeEpoch)return;
+ currentServer=s;
+ if($('#wake-history')){const history=$('#wake-history'),expanded=history.querySelector?.('details')?.open;history.innerHTML=wakeHistory(s,expanded);}
+ if($('#sleep-status'))$('#sleep-status').textContent=(s.sleep_info?.reason||'')+(s.sleep_info?.error?' · '+s.sleep_info.error:'');
+ const header=$('#server-heading');if(header)header.outerHTML=serverHeader(s).split('<div class="tabs server-tabs">')[0];
+ if($('#sleep-now'))$('#sleep-now').disabled=!s.sleep||!s.launch||['installing','updating','stopping','killing'].includes(s.status);
+ if(tab==='mods'){
+  if($('#installed-mods'))
+  $('#installed-mods').innerHTML=installedMods(s);
+  if(modSearch?.sid===sid)for(const project of modSearch.hits){
+   if(!['installing','updating'].includes(s.status))project.installing=false;
+   const container=document.querySelector(`[data-install="${CSS.escape(project.project_id)}"]`);
+   if(container&&document.activeElement?.closest('[data-install]')!==container)container.innerHTML=modVersionControl(project);
+  }
+ }
+ if(tab==='console'){
+  const logs=await api('/servers/'+requestedSid+'/logs');const el=$('#console');
+  if(el&&epoch===routeEpoch){const previousTop=el.scrollTop;el.textContent=logs.lines.join('\n')||'Console output will appear when the server starts.';el.scrollTop=consoleAutoScroll?el.scrollHeight:previousTop;}
+ }
+}
+async function refresh() {
+ if(!user||polling||$('#modal').open||document.hidden)return;
+ polling=true;
+ try{
+  const epoch=routeEpoch;
+  if(['dashboard','analytics'].includes(route) || (route==='server' && ['overview','players'].includes(tab)))await render(epoch);
+  else if(route==='server')await refreshServerPanels();
+  
+ }catch(e){console.debug('Refresh:',e.message);}finally{polling=false;}
+}
+async function init(){
+ try{const setup=await api('/setup');if(setup.required){showAuth(true);return;}const me=await api('/me');user=me.user;csrf=me.csrf;appearance=await api('/appearance');refreshFavicon();await navigate('dashboard');void activityPoll();}catch(e){showAuth(false);}
+}
+setInterval(refresh,5000);
+setInterval(activityPoll,2000);
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+
+function notificationActions(n){
+ if(n.kind==='wrapper')return button('Open Settings','go-settings','','small');
+ if(n.resolved)return '<p class="subtle">Resolved</p>';
+ if(n.kind==='whitelist'&&(user?.role==='owner'||n.can_manage_players||(currentServer?.id===n.server_id&&allowed('manage_players'))))return `<div class="actions">${button('Whitelist','request-approve',n.id,'small primary')}${button('Ignore','request-ignore',n.id,'small')}</div>`;
+ return n.server_id?`<div class="actions">${button(n.kind==='runtime'?'Review server update':n.kind==='mod'?'Review mod updates':'Open server','notification-open',JSON.stringify({sid:n.server_id,tab:n.payload?.tab||'overview'}),'small')}</div>`:'';
+}
+function playersPanel(data,compact=false){
+ const rows=data.players;
+ const card=p=>`<article class="player-row"><span class="player-head"><img src="/api/servers/${sid}/head?name=${encodeURIComponent(p.name)}" alt="${esc(p.name)} head" loading="lazy"></span><div class="player-info"><strong>${esc(p.name)}</strong><small>${p.online?'Online · ':''}${p.op?'Operator (level '+(p.level||4)+')':'Standard player'}${p.whitelisted?' · Whitelisted':''}${p.banned?' · Banned':''}</small><small>${esc(p.uuid||'UUID not cached yet')}</small>${p.reason?`<small>${esc(p.reason)}</small>`:''}</div>${admin()&&!compact?`<div class="actions">${button(p.whitelisted?'Remove whitelist':'Whitelist','player-action',JSON.stringify({name:p.name,action:p.whitelisted?'unwhitelist':'whitelist'}),'small')}${button(p.op?'De-op':'Op','player-confirm',JSON.stringify({name:p.name,action:p.op?'deop':'op'}),'small')}${button(p.banned?'Unban':'Ban','player-confirm',JSON.stringify({name:p.name,action:p.banned?'pardon':'ban'}),'small')}</div>`:''}</article>`;
+ if(compact)return `<section class="panel"><div class="panelhead"><h2>Players ${data.online_count==null?'':'· '+data.online_count+' online'}</h2><button class="button small" data-tab="players">Manage players</button></div>${rows.filter(p=>p.online).map(card).join('')||'<p>No online names reported yet.</p>'}<p class="smalltext">Names come from join/leave logs. Player count comes from Minecraft’s status query.</p></section>`;
+ return `<section class="panel"><h2>Join requests</h2>${data.requests.map(n=>`<div class="player-row"><strong>${esc(n.payload.name)}</strong>${notificationActions(n)}</div>`).join('')||'<p>No pending whitelist requests.</p>'}</section>${allowed('manage_players')?`<form class="panel" data-form="player"><h2>Manage a player</h2><div class="formgrid">${field('Minecraft username','name','','text','','required pattern="[A-Za-z0-9_]{1,16}"')}${selectField('Action','action',[['whitelist','Whitelist'],['unwhitelist','Remove whitelist'],['ban','Ban'],['pardon','Unban'],['op','Make operator'],['deop','Remove operator']],'whitelist')}</div><button class="button primary">Apply action</button><p class="smalltext">When running, Minecraft processes the command. When stopped, MMSM updates the player lists. Online-mode servers verify new usernames with Mojang.</p></form>`:''}${[['Online',p=>p.online],['Whitelisted',p=>p.whitelisted],['Banned',p=>p.banned],['Known players',()=>true]].map(([label,filter])=>`<section class="panel"><h2>${label}</h2>${rows.filter(filter).map(card).join('')||'<p>No players in this section.</p>'}</section>`).join('')}`;
 }
 function backupsPanel(s,d){
  return `<div class="notice">Backups gracefully stop a running server, save its files, then start it again. Keep MMSM running for schedules to run. Archived servers are skipped; missed intervals run once on return.</div><section class="panel"><div class="panelhead"><h2>Backup rules</h2>${button('Add rule','backup-rule-new','','primary','plus')}</div>${d.rules.map(r=>`<article class="backup-row"><div><h3>${esc(r.name)}</h3><p>${esc(r.path)}</p><small>Keep ${r.keep} backups</small></div><div class="actions">${button('Run now','backup-run',r.id,'small primary')}${button('Edit','backup-rule-edit',r.id,'small')}${button('Delete rule','backup-rule-delete',r.id,'small danger')}</div></article>`).join('')||'<p>Create a backup rule with a destination and retention count.</p>'}${s.backup_result?`<p class="${s.backup_result.ok?'subtle':'orange'}">Last manual backup: ${esc(s.backup_result.path||s.backup_result.error)}</p>`:''}</section><section class="panel"><div class="panelhead"><h2>Schedules</h2>${button('Add schedule','schedule-new','','primary','plus')}</div>${d.schedules.map(j=>`<article class="backup-row"><div><h3>${esc(j.action)} every ${j.every} ${esc(j.unit)}</h3><p>${j.enabled===false?'Paused':'Next: '+esc(date(j.next_run))}${j.rule_id?' · '+esc(d.rules.find(r=>r.id===j.rule_id)?.name||'Missing rule'):''}</p><small>${esc(j.last_result||'Not run yet')}${j.last_run?' · '+esc(date(j.last_run)):''}</small></div><div class="actions">${button('Edit','schedule-edit',j.id,'small')}${button(j.enabled===false?'Enable':'Pause','schedule-toggle',j.id,'small')}${button('Delete','schedule-delete',j.id,'small danger')}</div></article>`).join('')||'<p>Schedule backups, starts, stops, restarts or sleep.</p>'}</section><section class="panel"><div class="panelhead"><h2>Backup history</h2>${button('Refresh','backup-refresh','','small','refresh')}</div>${d.history.map(r=>`<p><strong>${esc(date(r.created))}</strong><br><span class="subtle">${esc(r.path)}</span></p>`).join('')||'<p>No saved backups yet.</p>'}<p class="smalltext">To restore: stop the server, preserve the current folder, then extract a backup into its Servers folder.</p></section>`;

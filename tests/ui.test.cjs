@@ -345,12 +345,12 @@ test('sync and DNS tabs expose controls and escape names',()=>{
 });
 
 test('domain input uses fixed readonly base and exposes opt-in Cloudflare settings',()=>{
- const h=harness();const html=h.run("domainFields('minecraft.example.com','address_label','trigon')");
- assert.match(html,/Server IP\/domain/);assert.match(html,/name="address_label"/);assert.match(html,/domain-suffix/);assert.doesNotMatch(html,/placeholder="trigon"/);
+ const h=harness();const html=h.run("domainFields('minecraft.example.com','address_label','survival')");
+ assert.match(html,/Server IP\/domain/);assert.match(html,/name="address_label"/);assert.match(html,/domain-suffix/);assert.doesNotMatch(html,/placeholder="survival"/);
  const settings=h.run("settingsPage({web_port:11015,running_web_port:11015,default_memory_mb:4096,dns_token_saved:true})");
  assert.match(settings,/name="dns_auto" type="checkbox" >/);assert.match(settings,/Token saved/);assert.match(settings,/name="dns_token" type="password" value=""/);
- const card=h.run('serverCard('+JSON.stringify({...sample,public_hostname:'trigon.minecraft.example.com'})+')');
- assert.match(card,/trigon.minecraft.example.com/);
+ const card=h.run('serverCard('+JSON.stringify({...sample,public_hostname:'survival.minecraft.example.com'})+')');
+ assert.match(card,/survival.minecraft.example.com/);
 });
 
 test('favicon refresh follows the saved logo revision and update channel exposes two choices',async()=>{
@@ -368,7 +368,7 @@ test('wrapper settings is a footer gear before the version and respects global a
  assert.doesNotMatch(html.split('</nav>')[0],/data-route="settings"/);
  const footer=html.split('class="sidebar-bottom"')[1].split('</aside>')[0];
  assert.match(footer,/footer-settings active/);assert.match(footer,/aria-label="Wrapper settings"/);assert.match(footer,/aria-current="page"/);
- assert.ok(footer.indexOf('data-route="settings"')<footer.indexOf('MMSM 0.8.1'));
+ assert.ok(footer.indexOf('data-route="settings"')<footer.indexOf('MMSM 0.9.0'));
  h.run("user={role:'viewer',username:'Viewer'};shell()");assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="settings"/);
  h.run("user={role:'admin',username:'Limited',server_ids:['s1']};shell()");assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="settings"/);
 });
@@ -430,7 +430,7 @@ test('new defaults and domain setup hide obsolete SSH fields',()=>{
  assert.match(html,/name="default_port_min"/);assert.match(html,/name="default_port_max"/);
  assert.doesNotMatch(html,/SSH username|Private key path|Maintain the UNM SSH/);
  const domain=h.run("domainFields('minecraft.example.com','address_label')");
- assert.match(domain,/domain-suffix/);assert.doesNotMatch(domain,/readonly|placeholder="trigon"/);
+ assert.match(domain,/domain-suffix/);assert.doesNotMatch(domain,/readonly|placeholder="survival"/);
  h.run('accountSettingsModal()');assert.match(h.elements.get('#modal').innerHTML,/data-form="username"/);
 });
 

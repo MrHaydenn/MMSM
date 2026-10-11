@@ -21,27 +21,27 @@ class DNS(support.Base):
         rid=suffix.split('/')[-1] if method=='PUT' else str(len(self.calls))
         self.rows[rid]={'id':rid,**body};return self.rows[rid].copy()
     def test_create_reconcile_change_port_rename_and_clear(self):
-        result=save(self.manager,self.s['id'],{'label':'trigon','port':25570})
+        result=save(self.manager,self.s['id'],{'label':'survival','port':25570})
         self.assertEqual(result['automation'],'Published to Cloudflare');self.assertEqual(len(self.rows),3)
         self.assertFalse(any(r.get('proxied') for r in self.rows.values()))
         self.calls.clear();publish(self.manager,self.s['id'])
         self.assertTrue(all(c[0]=='GET' for c in self.calls))
-        save(self.manager,self.s['id'],{'label':'trigon','port':25571})
+        save(self.manager,self.s['id'],{'label':'survival','port':25571})
         self.assertIn('0 5 25571 minecraft.example.com',[r['content'] for r in self.rows.values()])
         save(self.manager,self.s['id'],{'label':'second','port':25572})
-        self.assertEqual(len(self.rows),3);self.assertFalse(any('trigon' in r['name'] for r in self.rows.values()))
+        self.assertEqual(len(self.rows),3);self.assertFalse(any('survival' in r['name'] for r in self.rows.values()))
         save(self.manager,self.s['id'],{'label':''})
         self.assertEqual(len(self.rows),1);self.assertEqual(next(iter(self.rows.values()))['type'],'A')
     def test_existing_records_not_overwritten_failure_retries(self):
         self.rows['other']={'id':'other','name':'minecraft.example.com','type':'A','content':'1.1.1.1'}
-        result=save(self.manager,self.s['id'],{'label':'trigon'})
+        result=save(self.manager,self.s['id'],{'label':'survival'})
         self.assertIn('DNS conflict',result['automation']);self.assertEqual(self.rows['other']['content'],'1.1.1.1')
         self.rows.clear();publish_all(self.manager)
         self.assertEqual(self.store.server(self.s['id'])['dns_status'],'Published to Cloudflare')
         self.store.set_settings({'dns_auto':False});self.calls.clear();publish_all(self.manager);self.assertEqual(self.calls,[])
     def test_wrong_zone_and_archived_never_write(self):
         with patch('mmsm.domains.cloudflare',return_value={'name':'other.com'}) as call:
-            result=save(self.manager,self.s['id'],{'label':'trigon'})
+            result=save(self.manager,self.s['id'],{'label':'survival'})
             self.assertIn('does not match',result['automation']);self.assertEqual(call.call_count,1)
         self.s=self.store.server(self.s['id']);self.s['archived']=True;self.store.save_server(self.s)
         self.calls.clear();publish_all(self.manager);self.assertEqual(self.calls,[])

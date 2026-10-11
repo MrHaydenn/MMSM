@@ -1,90 +1,20 @@
-# MMSM and UNM delegated DNS
+# UNM delegated DNS integration
 
-UNM hosts the delegated DNS zone; MMSM publishes one A and one Java SRV record per server. This integration does not allocate ports, create forwarding rules or start game servers. Use the external TCP port already forwarded in UNM to the MMSM host port. Normal stop/sleep preserves the address. Archiving preserves DNS; clear the public address before archiving if it should be removed. Existing manually managed DNS records are never taken over.
+All values below are examples. `example.com` is an example domain and `203.0.113.10` is a documentation-only IP; replace them with your own domain and public address. Do not enter the example IP as a live MMSM public address.
 
-## Prepare UNM on the VPS
+1. Set up your own UNM service with authoritative DNS enabled for a delegated zone, for example `minecraft.example.com`. Follow UNM's current installation documentation for its service/firewall configuration.
+2. At your DNS provider, create a DNS-only A record for `ns1.example.com` pointing to your DNS server's real public IP. Delegate `minecraft.example.com` using an NS record pointing to that nameserver. Keep the parent domain's registrar nameservers unchanged. Move any necessary existing records into the delegated zone before switching. Review conflicting records/DS records and arrange redundant authoritative DNS if needed.
+3. Ensure authoritative DNS is reachable over both UDP and TCP port 53. Generic diagnostic examples:
 
-Update UNM with `sudo bash /opt/unm/deploy/update.sh`. Keep existing website and forwarding settings. The DNS backend was staged previously; confirm `/etc/unm/services.json` has `public_ip` set to the VPS IPv4, `dns_zones` containing `minecraft.mrhaydenn.us`, and `nameservers` containing `ns1.mrhaydenn.us`.
+   ```sh
+   dig @203.0.113.10 minecraft.example.com SOA +norecurse
+   dig +tcp @203.0.113.10 minecraft.example.com SOA +norecurse
+   ```
 
-Allow DNS while firewalld is running:
+4. In UNM, generate an integration key for that delegated zone. Store it privately.
+5. In MMSM wrapper Settings, select **UNM**, enter your UNM HTTPS URL (for example `https://network.example.com:8787`) and integration token, and set DNS zone and base domain to your delegated zone. Enter the real public Minecraft entry-point IP, enable automatic DNS publishing, save, and test the connection.
+6. Assign a label such as `survival` in the server's Public address section. MMSM publishes the server's owned A/SRV pair and shows its address, such as `survival.minecraft.example.com`.
 
-```bash
-sudo firewall-cmd --zone=public --add-service=dns
-sudo firewall-cmd --permanent --zone=public --add-service=dns
-sudo systemctl enable --now unm-dns
-```
+Forwarding and server availability are separate from DNS. DNS caches can retain changes until TTL expiry. MMSM retries publishing and cleans up its owned records when addresses change or servers are deleted; it does not take over unrelated records. The integration token stays on the MMSM host and is not returned by the settings API.
 
-Allow incoming TCP and UDP 53 in any attached DigitalOcean Cloud Firewall too. Enable only `dns_enabled` in `/etc/unm/services.json`; preserve the other values. In UNM click Apply saved DNS records. Test before changing delegation:
-
-```bash
-dig @157.230.239.126 minecraft.mrhaydenn.us SOA +norecurse
-dig +tcp @157.230.239.126 minecraft.mrhaydenn.us SOA +norecurse
-```
-
-Repeat from outside the VPS. Responses must have the `aa` authoritative flag. Keep systemd-resolved running. This BIND instance binds only the configured public IPv4 and disables recursion.
-
-## Delegate the child zone at Cloudflare
-
-Keep the main domain's registrar nameservers unchanged. Add a DNS-only A record `ns1` → `157.230.239.126`, then an NS record `minecraft` → `ns1.mrhaydenn.us`. Copy any records that must remain under minecraft into UNM before delegation. Review conflicting records or DS records first. One VPS/nameserver has no redundancy; a second independent authoritative server can be added later.
-
-## Create the restricted credential
-
-```bash
-sudo -u unm python3 /opt/unm/unm.py --config /etc/unm/config.json create-dns-client
-```
-
-Enter client name `mmsm` and zone `minecraft.mrhaydenn.us`. Save the displayed token privately; only its hash is stored by UNM. Do not paste it into chat. This token can only publish/delete its own server A/SRV pairs in that zone, using UNM's configured public IP. It cannot access the panel, websites, WireGuard or firewall. Integration records appear in UNM's DNS list; edit/clear them through MMSM.
-
-Revoke later with:
-
-```bash
-sudo -u unm python3 /opt/unm/unm.py --config /etc/unm/config.json revoke-dns-client
-```
-
-Revocation retains published records. Recreating the same client name rotates credentials and preserves ownership. A second MMSM installation must use a different client name.
-
-## Connect MMSM
-
-Install the verified Experimental update (no new stable release). Run this on the computer that runs the MMSM backend, keeping the terminal open for this initial test:
-
-```powershell
-ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 127.0.0.1:8790:127.0.0.1:8787 root@157.230.239.126
-```
-
-The initial connection uses a localhost SSH tunnel. Reconnect it after reboot; it is not a persistent service. A production HTTPS endpoint with a trusted certificate is also supported. HTTP to a remote hostname/IP is rejected to protect the token, and redirects are not followed.
-
-MMSM Settings → Minecraft domains:
-
-- Provider: UNM delegated DNS
-- UNM URL: `http://127.0.0.1:8790` (on the MMSM backend computer)
-- UNM integration token: the one-time token
-- DNS zone and base domain: both `minecraft.mrhaydenn.us`
-- Public entry-point IP: `157.230.239.126`
-- Enable automatic DNS publishing; save Settings
-
-Tokens are never returned by MMSM's settings API; a blank token field preserves the saved value. The MMSM host stores its credential, so protect its data directory. Before switching providers/endpoints/zones, clear previous owned addresses through the old connection. Previously published Cloudflare records must be removed through the Cloudflare provider before switching.
-
-Set a server's Public address label to `test`, with the forwarded external port, e.g. 25565. Saving (or creating a server with a label) publishes immediately. Failures are displayed and retried every five minutes while automation is enabled. Disabling automation leaves records in place. Renaming replaces the pair; clearing the label deletes only that server's pair. Repeated publication with unchanged records does not reload BIND. Different names using the same IP/port still reach the same server.
-
-Verify:
-
-```bash
-dig @157.230.239.126 test.minecraft.mrhaydenn.us A +norecurse
-dig @157.230.239.126 _minecraft._tcp.test.minecraft.mrhaydenn.us SRV +norecurse
-dig test.minecraft.mrhaydenn.us A
-```
-
-Connect Minecraft Java using `test.minecraft.mrhaydenn.us`. DNS caches may retain the old address/port until TTL expires (300 seconds); a running server and a working forwarding rule are still required.
-
-
-## MMSM-managed SSH connection
-
-MMSM Settings → Minecraft domains → UNM delegated DNS now supports **Maintain the UNM SSH connection automatically**. This launches the host's installed OpenSSH client without a console window on Windows, retries dropped connections, and terminates only its own SSH process on shutdown. It runs whenever MMSM runs; MMSM itself must start after boot if this should start after boot.
-
-Use VPS address `157.230.239.126`, SSH username `root`, SSH port `22`, the absolute path to your existing `unm_mmsm` private key on the MMSM computer (not `.pub`), and local connection port `8790`. When enabled, saving Settings sets the UNM URL automatically to `http://127.0.0.1:8790`. Keep the DNS integration token and zone settings unchanged.
-
-Close your previous manual SSH tunnel before enabling this so its local port is free. Save Settings, wait a few seconds, then click **Test UNM connection**. Status updates every five seconds while Settings is open. Once connected, save a server address; the existing five-minute DNS retry also continues.
-
-The key must already be authorized on the VPS, and the same Windows account running MMSM must already trust the VPS host key. MMSM uses `StrictHostKeyChecking=yes`, `BatchMode=yes`, and the specified identity; it never accepts a changed/unknown host key automatically or stores a key passphrase. If your private key has a passphrase, load it into the SSH agent for that account with `ssh-add` first. A Windows service running under a different account needs its own accessible key, known-hosts file and agent arrangement. Test from that account. Authentication failures and occupied local ports are shown in connection status and retried after a delay.
-
-To return to an external tunnel or direct HTTPS URL, turn off managed SSH, save, then enter the external UNM URL and save again. This does not modify DNS records or the VPS firewall.
+UNM integration requires a separately installed compatible UNM service; MMSM does not install a nameserver or change registrar delegation for you.

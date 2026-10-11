@@ -9,7 +9,7 @@ class Tunnel(support.Base):
     def setUp(self):
         super().setUp()
         self.key=Path(self.temp.name)/'key';self.key.write_text('fixture-only')
-        self.store.set_settings(dict(dns_provider='unm',unm_tunnel_enabled=True,unm_ssh_host='157.230.239.126',unm_ssh_user='root',unm_ssh_port=22,unm_ssh_key=str(self.key),unm_local_port=8790))
+        self.store.set_settings(dict(dns_provider='unm',unm_tunnel_enabled=True,unm_ssh_host='203.0.113.10',unm_ssh_user='root',unm_ssh_port=22,unm_ssh_key=str(self.key),unm_local_port=8790))
         self.process=MagicMock();self.process.poll.return_value=None;self.process.stderr=io.StringIO('')
         self.spawn=patch('mmsm.unm_tunnel.subprocess.Popen',return_value=self.process).start();self.addCleanup(patch.stopall)
         patch('mmsm.unm_tunnel.shutil.which',return_value='/usr/bin/ssh').start()
@@ -57,6 +57,7 @@ class TunnelHTTP(support.HTTPTests):
         self.assertEqual(self.request('/api/unm-connection')[1]['status'],'disabled')
         self.assertEqual(self.request('/api/unm-connection/test','POST',{})[1]['status'],'error')
         key=Path(self.temp.name)/'key';key.write_text('fixture')
-        settings=dict(dns_provider='unm',unm_tunnel_enabled=True,unm_ssh_host='157.230.239.126',unm_ssh_user='root',unm_ssh_key=str(key),unm_ssh_port=22,unm_local_port=8791)
+        settings=dict(dns_provider='unm',unm_tunnel_enabled=True,unm_ssh_host='203.0.113.10',unm_ssh_user='root',unm_ssh_key=str(key),unm_ssh_port=22,unm_local_port=8791)
         self.assertEqual(self.request('/api/settings','PUT',settings)[0],200)
         self.assertFalse(self.store.settings()['unm_tunnel_enabled'])
+

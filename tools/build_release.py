@@ -23,7 +23,7 @@ if a.channel=='experimental' and not a.revision:p.error('Experimental builds req
 if a.archive_name and not re.fullmatch(r'[A-Za-z0-9._-]+\.zip',a.archive_name):p.error('Invalid archive filename')
 out=Path(a.output);out.mkdir(parents=True,exist_ok=True)
 archive=out/(a.archive_name or f'MMSM-{__version__}-update.zip')
-files=list((root/'mmsm').rglob('*'))+[root/'start.bat',root/'start.sh',root/'README.md']
+files=list((root/'mmsm').rglob('*'))+[root/'start.bat',root/'README.md']
 with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as z:
     for file in sorted(files):
         if not file.is_file() or file.is_symlink() or '__pycache__' in file.parts:continue

@@ -201,3 +201,9 @@ Wake tracking is covered by a real loopback proxy/status exchange, burst dedupli
 ## Join-only automatic waking
 
 The real proxy tests now assert repeated status requests leave the server asleep with no wake history or queued start, then join handshakes queue exactly one start and return the reconnect message. The JVM lifecycle test verifies status leaves its sleeping process offline and a join starts it again. Full Python/UI suites, syntax checks and published updater verification are required.
+
+## Stable 0.9.0 distribution cleanup
+
+Personal server/domain and public-IP examples were replaced across documentation and fixtures. A scan of source IP/domain literals found only localhost/bind addresses, generic documentation/LAN addresses, provider endpoints and public resolver addresses used by tests. The update package was inspected for the removed personal values and contains only program files, README and start.bat. Full-source releases also omit shell, Docker and systemd startup files. Windows installation and upgrade instructions lead the README.
+
+Python compilation, JavaScript syntax and the full Python/UI suites are required before publishing. The stable workflow builds the complete distribution and checksum update feed and verifies the published package through the real updater. Windows start.bat itself cannot be executed on this Linux validation host; Windows startup remains a host acceptance check. Earlier Git commits and older release assets are historical and are not rewritten by this cleanup.

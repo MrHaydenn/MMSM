@@ -81,12 +81,12 @@ class PortsAndDomains(support.Base):
 
     def test_domain_records_and_new_install_feed(self):
         self.assertEqual(self.store.settings()['update_feed'],GITHUB_UPDATE_FEED)
-        settings={'dns_zone':'mrhaydenn.us','dns_base':'minecraft.mrhaydenn.us','dns_ip':'8.8.8.8'}
+        settings={'dns_zone':'example.com','dns_base':'minecraft.example.com','dns_ip':'8.8.8.8'}
         self.store.set_settings(settings);server=support.server(self.store)
-        result=save(self.manager,server['id'],{'label':'Trigon','port':25570})
-        self.assertEqual(result['hostname'],'trigon.minecraft.mrhaydenn.us')
-        self.assertEqual(result['records'][2]['name'],'_minecraft._tcp.trigon.minecraft')
-        self.assertEqual(result['srv']['target'],'minecraft.mrhaydenn.us')
+        result=save(self.manager,server['id'],{'label':'Survival','port':25570})
+        self.assertEqual(result['hostname'],'survival.minecraft.example.com')
+        self.assertEqual(result['records'][2]['name'],'_minecraft._tcp.survival.minecraft')
+        self.assertEqual(result['srv']['target'],'minecraft.example.com')
         self.assertEqual(result['srv']['port'],25570)
         self.assertTrue(all(x['proxy']=='DNS only' for x in result['records']))
         with self.assertRaises(Problem):validate_settings({**settings,'dns_base':'evil.test'})

@@ -47,7 +47,7 @@ def atomic_write(path, data):
 
 
 def password_hash(password, salt=None):
-    require(isinstance(password, str) and 12 <= len(password) <= 256, 'Password must be 12–256 characters')
+    require(isinstance(password, str) and 0 < len(password) <= 256, 'Password is required and must be at most 256 characters')
     salt = salt or secrets.token_hex(16)
     return salt + ':' + hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=16384, r=8, p=1).hex()
 

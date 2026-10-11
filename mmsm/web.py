@@ -416,7 +416,7 @@ class Handler(BaseHTTPRequestHandler):
                 store.audit(self.user['username'], 'Changed global settings')
                 self.reply({'saved': True, 'restart_required': values['web_port'] != self.server.server_port or values['bind_host'] != self.server.server_address[0] or (values['public_origin'] or None) != self.server.origin}); return
         if path == '/api/users':
-            self.role('admin')
+            self.role('owner')
             if method == 'GET': self.reply([user_public(r) for r in store.rows('SELECT id,username,role,created,server_ids,avatar,permissions FROM users')]); return
             if method == 'POST':
                 selected = validate_scope(store,data)
@@ -427,7 +427,7 @@ class Handler(BaseHTTPRequestHandler):
                 store.audit(self.user['username'], 'Created account ' + user['username'])
                 self.reply(user, 201); return
         if len(self.parts) == 3 and self.parts[:2] == ['api', 'users'] and method in ('PUT', 'DELETE'):
-            self.role('admin')
+            self.role('owner')
             uid = self.parts[2]
             rows = store.rows('SELECT * FROM users WHERE id=?', (uid,)); require(rows, 'Account not found', 404)
             require(rows[0]['role'] != 'owner' and uid != self.user['id'], 'Cannot modify the owner or your own account here', 403)

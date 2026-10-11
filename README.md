@@ -8,7 +8,7 @@ A self-hosted Minecraft Java server manager with a browser interface, Modrinth i
 2. Open the [latest stable release](https://github.com/MrHaydenn/MMSM/releases/latest) and download **MMSM-0.9.0.zip**. This is the full installation; the `-update.zip` asset is for MMSM's built-in updater.
 3. Extract the ZIP to a writable folder, for example `C:\MMSM`. Open the extracted `mmsm` folder containing `start.bat`. Do not run from inside the ZIP or put it in Program Files.
 4. Double-click **start.bat**. Keep its terminal open while using MMSM. On first startup, MMSM installs missing telemetry/image dependencies into its own `dependencies` folder; allow time and internet access for this.
-5. Open **http://127.0.0.1:11015** in your browser. Copy the setup token printed in the terminal and create your owner account. After setup, only administrators can create other accounts.
+5. Open **http://127.0.0.1:11015** in your browser. Copy the setup token printed in the terminal and create your owner account. After setup, only the owner can create other accounts.
 6. Create a Minecraft server in the dashboard. Java is selected and downloaded automatically when needed. Review the Minecraft EULA before creating servers; automatic acceptance is enabled by default in wrapper Settings.
 
 `start.bat` is the supplied launcher. It starts MMSM from its own folder and uses your saved settings. Fresh installs listen on all IPv4 interfaces on WebGUI port **11015**. You can change the port/listener in Settings and restart MMSM, or run `start.bat --port 11016` from Command Prompt for an explicit override. If Windows asks about firewall access, allow the networks you intend to use.
@@ -41,7 +41,7 @@ For a manual upgrade, stop Minecraft and MMSM and back up the whole installation
 
 Sleep requires successful checks showing zero players continuously for the configured idle interval. Failed/unknown player checks reset the timer. The server page shows the countdown or why it is paused. Graceful stopping saves the world and may take additional time.
 
-**Server-list pings never wake a sleeping server.** They show “Sleeping. Join the server to start it.” A join attempt starts Java and tells the player to wait a moment and try joining again. Explicit Stop pauses automatic wake until Start or Sleep now. Server Settings keeps the last 50 automatic wake requests with time, source IP and startup result. A join handshake is not an authenticated identity; tunnels may hide the original source IP.
+**Join mode is the default:** server-list pings stay asleep and show “Sleeping. Join the server to start it.” Optional Ping mode wakes on a Minecraft status ping or join attempt. A wake starts Java and tells the player to wait a moment and try joining again. Explicit Stop pauses automatic wake until Start or Sleep now. Server Settings shows the latest wake, the sleep countdown/reason, and an expandable history of up to 50 requests. A join handshake is not an authenticated identity; tunnels may hide the original source IP.
 
 Sync mirrors only selected folders, such as `config` and `mods`, plus the runtime version if enabled. Sleep, RAM, idle time, AutoStart, names, server properties, public addresses and backup rules remain independent. Templates may copy initial settings once. Changes are checked every 30 seconds and applied only while both servers are stopped. Editing synced content prompts to unlink; other settings/files do not. External edits pause sync, and chained syncs/world/runtime-folder copies are blocked.
 
@@ -65,3 +65,5 @@ node --test tests/ui.test.cjs
 ```
 
 Node and a Java compiler are needed for the development checks; they are not required to launch the manager. Java process tests use a test fixture, not a real modded Minecraft distribution. See [verification](docs/VERIFICATION.md) and [publishing updates](docs/RELEASING.md). Ordinary pushes publish only opt-in Experimental builds; stable releases require an explicit release request.
+
+Wrapper Settings groups General, Archived servers and owner-only Accounts. The Overview replaces the separate Servers page. Non-administrators can use the archive section for servers visible to their account; global settings remain restricted, and restoring/deleting a server requires its specific permission. Only the owner can list, create, edit or delete accounts. Passwords no longer have a 12-character minimum, but must be nonempty and at most 256 characters. A saved UNM token is indicated without revealing its value. Launcher images can be removed to restore the default logo and favicon.

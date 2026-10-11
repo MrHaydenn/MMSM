@@ -207,3 +207,9 @@ The real proxy tests now assert repeated status requests leave the server asleep
 Personal server/domain and public-IP examples were replaced across documentation and fixtures. A scan of source IP/domain literals found only localhost/bind addresses, generic documentation/LAN addresses, provider endpoints and public resolver addresses used by tests. The update package was inspected for the removed personal values and contains only program files, README and start.bat. Full-source releases also omit shell, Docker and systemd startup files. Windows installation and upgrade instructions lead the README.
 
 Python compilation, JavaScript syntax and the full Python/UI suites are required before publishing. The stable workflow builds the complete distribution and checksum update feed and verifies the published package through the real updater. Windows start.bat itself cannot be executed on this Linux validation host; Windows startup remains a host acceptance check. Earlier Git commits and older release assets are historical and are not rewritten by this cleanup.
+
+## Settings and navigation cleanup (experimental)
+
+167 Python tests and 60 UI behavior tests cover owner-only account management, short-password login/change, authorized logo removal, persisted wake modes and real proxy behavior/messages for ping and join. UI checks cover settings tabs, saved-token feedback, collapsed wake history with countdown, removal of redundant sidebar entries and image reset controls. Wake mode defaults to join for existing servers. Syntax checks are required before publication.
+
+Native browser hover appearance and Windows file-picker rendering are not visually tested by the DOM harness. Permissions are enforced by API routes, not only hidden controls; signed-in users can view their permitted archived servers under Settings without gaining global administration rights.

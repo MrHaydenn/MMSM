@@ -117,6 +117,9 @@ def extra_route(h):
         if method=='POST':
             h.role('admin');require(scope(h) is None,'Global administrator required',403)
             atomic_write(file,image_bytes(__import__('base64').b64decode(data['image'],validate=True),128));h.reply({'saved':True})
+        elif method=='DELETE':
+            h.role('admin');require(scope(h) is None,'Global administrator required',403)
+            file.unlink(missing_ok=True);h.reply({'removed':True})
         elif method=='GET':h.reply(file.read_bytes(),content_type='image/png')
         else:return False
         return True

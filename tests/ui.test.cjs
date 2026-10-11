@@ -33,10 +33,10 @@ test('RAM forms display GB and convert fractional GB to compatible stored MB',()
  assert.equal(h.run('ram(536870912)'), '0.5 GB');
 });
 
-test('navigation moves activity and username to the header with a Servers entry',()=>{
+test('navigation keeps activity in the header and removes redundant sidebar entries',()=>{
  const h=harness();h.run('shell()');const html=h.elements.get('#app').innerHTML;
  const sidebar=html.split('</aside>')[0],header=html.split('<header')[1];
- assert.match(sidebar,/data-route="servers"/);
+ assert.doesNotMatch(sidebar,/data-route="(?:servers|archive|accounts)"/);
  assert.doesNotMatch(sidebar,/data-route="downloads"|data-route="notifications"|Hayden/);
  assert.match(header,/downloads-popup/);assert.match(header,/notifications-popup/);assert.match(header,/Account settings for Hayden/);
  assert.doesNotMatch(html,/Connected to manager|data-action="password"|data-action="logout"/);
@@ -153,7 +153,7 @@ test('installed and discovery tabs are separate and status circles/icons are con
  h.run('currentServer=sample;sid=sample.id;modView="installed"');
  assert.match(h.run('modsBody(sample)'),/Installed projects/);assert.doesNotMatch(h.run('modsBody(sample)'),/id="search-results"/);
  h.run('modView="discover"');assert.match(h.run('modsBody(sample)'),/id="search-results"/);assert.doesNotMatch(h.run('modsBody(sample)'),/id="installed-mods"/);
- for(const fn of ['serverHeader(sample)','serverCard(sample)','serversPage([sample])']){
+ for(const fn of ['serverHeader(sample)','serverCard(sample)']){
   const html=h.run(fn);assert.match(html,/status-circle running/);assert.match(html,/\/api\/servers\/s1\/icon/);
  }
  assert.doesNotMatch(h.run('serverHeader(sample)'),/Your servers/);assert.match(h.run('serverHeader(sample)'),/Restart/);
@@ -247,7 +247,7 @@ test('crash and sleep indicators, live status and requested simplifications rend
  assert.match(h.run("statusDot({status:'sleeping'})"),/<svg/);assert.match(h.run("statusDot({status:'crashed'})"),/<svg/);
  assert.doesNotMatch(h.run('serverCard(sample)'),/>Manage</);
  h.run('shell()');const sidebar=h.elements.get('#app').innerHTML;
- assert.ok(sidebar.indexOf('data-route="archive"')<sidebar.indexOf('data-route="analytics"'));assert.doesNotMatch(sidebar,/draggable|Workspace/);
+ assert.doesNotMatch(sidebar,/data-route="(?:servers|archive|accounts)"/);assert.match(h.run('settingsNavigation()'),/Archived servers/);assert.doesNotMatch(sidebar,/draggable|Workspace/);
 });
 test('live property filter hides fields without disabling their submitted values',()=>{
  const h=harness(),fields=[{textContent:'max-players',hidden:false},{textContent:'difficulty',hidden:false}];
@@ -369,8 +369,8 @@ test('wrapper settings is a footer gear before the version and respects global a
  const footer=html.split('class="sidebar-bottom"')[1].split('</aside>')[0];
  assert.match(footer,/footer-settings active/);assert.match(footer,/aria-label="Wrapper settings"/);assert.match(footer,/aria-current="page"/);
  assert.ok(footer.indexOf('data-route="settings"')<footer.indexOf('MMSM 0.9.0'));
- h.run("user={role:'viewer',username:'Viewer'};shell()");assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="settings"/);
- h.run("user={role:'admin',username:'Limited',server_ids:['s1']};shell()");assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="settings"/);
+ h.run("user={id:'viewer',role:'viewer',username:'Viewer'};shell()");assert.match(h.elements.get('#app').innerHTML,/data-route="settings"/);assert.doesNotMatch(h.run('settingsNavigation()'),/>General<|>Accounts</);
+ h.run("user={id:'limited',role:'admin',username:'Limited',server_ids:['s1']};shell()");assert.match(h.elements.get('#app').innerHTML,/data-route="settings"/);assert.doesNotMatch(h.run('settingsNavigation()'),/>General<|>Accounts</);
 });
 
 test('creator sees create and owned-server controls without global admin access',()=>{
@@ -380,7 +380,7 @@ test('creator sees create and owned-server controls without global admin access'
  assert.equal(h.run("allowed('console',owned)"),true);
  const header=h.run('serverHeader(owned)');assert.match(header,/Console/);assert.match(header,/data-action="server-stop"/);
  const card=h.run('serverCard(owned)');assert.match(card,/data-action="server-stop"/);
- h.run('shell()');assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="accounts"|data-route="settings"/);
+ h.run('shell()');assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-route="accounts"/);
 });
 
 test('server capabilities hide denied tabs, commands, file editing and backups actions',async()=>{
@@ -447,4 +447,15 @@ test('sleep diagnostics are visible and sync excludes operational settings',asyn
 test('wake history shows the source and result with safe escaping',()=>{
  const h=harness();h.context.s={wake_history:[{time:1,reason:'Minecraft server-list ping',source_ip:'<unsafe>',result:'Java started'}]};
  const html=h.run('wakeHistory(s)');assert.match(html,/Minecraft server-list ping/);assert.match(html,/&lt;unsafe&gt;/);assert.match(html,/Java started/);
+});
+
+test('settings groups owner accounts and archive while wake history stays collapsed',async()=>{
+ const h=harness();const nav=h.run('settingsNavigation()');assert.match(nav,/Accounts/);assert.match(nav,/Archived servers/);
+ h.run("user={id:'admin',role:'admin',username:'Admin'}");assert.doesNotMatch(h.run('settingsNavigation()'),/>Accounts</);
+ h.context.s={...sample,wake_mode:'ping',sleep_info:{reason:'Sleeping in 90 seconds'},wake_history:[{time:2,reason:'Latest',result:'Java started'},{time:1,reason:'Earlier',result:'Java started'}]};
+ const history=h.run('wakeHistory(s)');assert.match(history,/Latest/);assert.match(history,/Sleeping in 90 seconds/);assert.match(history,/<details ><summary>More wake logs/);assert.match(h.run('wakeHistory(s,true)'),/<details open>/);
+ h.run("tab='config';sid='s1'");assert.match(await h.run('serverBody(s)'),/name="wake_mode"/);
+ assert.doesNotMatch(h.run('brand()'),/YOUR WORLDS/);
+ const settings=h.run("settingsPage({default_memory_mb:4096,unm_token_saved:true})");assert.match(settings,/Integration token saved/);assert.doesNotMatch(settings,/Managed SSH tunnel/);
+ h.run('appearance.logo=true');assert.match(h.run('settingsPage({default_memory_mb:4096})'),/Restore default image/);
 });

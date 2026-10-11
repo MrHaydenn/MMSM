@@ -101,7 +101,7 @@ class Manager(Features):
         state = self.state(server['id'])
         if not server['sleep']: return {'reason': 'Sleep disabled'}
         if server.get('manual_stop'): return {'reason': 'Sleep paused by Stop; Start or Sleep now to re-enable'}
-        if state['status'] == 'sleeping': return {'reason': 'Asleep; a join attempt will wake it'}
+        if state['status'] == 'sleeping': return {'reason': 'Asleep; '+('a Minecraft ping' if server.get('wake_mode','join')=='ping' else 'a join attempt')+' will wake it'}
         if state['status'] != 'running': return {'reason': 'Idle timer starts when the server is online'}
         if state.get('status_query_error'): return {'reason': 'Idle timer reset: player status check failed', 'error': state['status_query_error']}
         if state.get('players'): return {'reason': 'Idle timer paused while players are online'}
@@ -576,10 +576,11 @@ class Manager(Features):
     def configure(self, sid, data):
         with self.locks[sid]:
             s = self.idle(sid)
-            for key in ('name', 'sleep', 'autostart', 'idle_minutes', 'memory_mb'):
+            for key in ('name', 'sleep', 'wake_mode', 'autostart', 'idle_minutes', 'memory_mb'):
                 if key in data: s[key] = data[key]
             require(isinstance(s['name'], str) and 1 <= len(s['name'].strip()) <= 64, 'Invalid name')
             require(isinstance(s['sleep'], bool), 'Sleep must be true or false')
+            require(s.get('wake_mode','join') in ('ping','join'),'Wake mode must be ping or join')
             require(isinstance(s.get('autostart', False), bool), 'AutoStart must be true or false')
             require(isinstance(s['idle_minutes'], int) and 1 <= s['idle_minutes'] <= 1440, 'Idle interval must be 1–1440 minutes')
             require(isinstance(s['memory_mb'], int) and 512 <= s['memory_mb'] <= 262144, 'Memory must be 0.5–256 GB')

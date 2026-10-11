@@ -1,3 +1,4 @@
+let sharedAccounts=null;
 'use strict';
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -317,7 +318,7 @@ async function installProject(projectId,type,versionId=null,serverId=sid){
  $('#modal').close();beginInstall(serverId);toast('Installing '+result.version+'. Progress is in Downloads.');
 }
 
-async function accountModal(u=null) {const servers=[...await api('/servers'),...await api('/servers?archive=true')];modal(u?'Edit account':'Add an account',`<form data-form="account"><input name="id" type="hidden" value="${esc(u?.id||'')}">${u?`<p>Editing ${esc(u.username)}</p>`:field('Username','username','','text','','required minlength="3" maxlength="32"')}${field(u?'New password (optional)':'Password','password','','password','',u?'':'required')}${selectField('Role','role',['viewer','operator','admin'],u?.role||'viewer')}${accountPermissionFields(u,servers)}<h3>Server access</h3><label class="check"><input type="checkbox" name="all_servers" ${!u||u.server_ids==null?'checked':''}> All servers, including future servers</label><p class="smalltext">Uncheck a server to restrict this account. Restricted admins cannot manage global settings. Only the owner manages accounts. Servers created by this account are always visible and fully controllable.</p>${servers.map(s=>`<label class="check"><input type="checkbox" name="server_access" value="${esc(s.id)}" ${!u||u.server_ids==null||u.server_ids.includes(s.id)?'checked':''}>${esc(s.name)}${s.archived?' (archived)':''}</label>`).join('')}<div class="formactions"><button class="button primary">Save account</button></div></form>`);}
+async function accountModal(u=null) {if(sharedAccounts&&!u){toast('Create the account at '+sharedAccounts+', then have them sign in here. Grant their server access afterward.');return;}const servers=[...await api('/servers'),...await api('/servers?archive=true')];modal(u?'Edit account':'Add an account',`<form data-form="account"><input name="id" type="hidden" value="${esc(u?.id||'')}">${u?`<p>Editing ${esc(u.username)}</p>`:field('Username','username','','text','','required minlength="3" maxlength="32"')}${sharedAccounts?'':field(u?'New password (optional)':'Password','password','','password','',u?'':'required')}${selectField('Role','role',['viewer','operator','admin'],u?.role||'viewer')}${accountPermissionFields(u,servers)}<h3>Server access</h3><label class="check"><input type="checkbox" name="all_servers" ${!u||u.server_ids==null?'checked':''}> All servers, including future servers</label><p class="smalltext">Uncheck a server to restrict this account. Restricted admins cannot manage global settings. Only the owner manages accounts. Servers created by this account are always visible and fully controllable.</p>${servers.map(s=>`<label class="check"><input type="checkbox" name="server_access" value="${esc(s.id)}" ${!u||u.server_ids==null||u.server_ids.includes(s.id)?'checked':''}>${esc(s.name)}${s.archived?' (archived)':''}</label>`).join('')}<div class="formactions"><button class="button primary">Save account</button></div></form>`);}
 
 
 async function launcherConnectionsModal() {
@@ -326,6 +327,7 @@ async function launcherConnectionsModal() {
 }
 
 function accountSettingsModal() {
+ if(sharedAccounts){closePopover();modal('Account settings',`<p>Signed in as ${esc(user.username)}.</p><p>Manage your username and password at <a href="${esc(sharedAccounts)}" target="_blank" rel="noopener noreferrer">Haydenn Accounts</a>.</p>${button('Sign out','logout','','','logout')}`);return;}
  closePopover();
  modal('Account settings',`<div class="account-summary"><span class="avatar">${avatar()}</span><div><h3>${esc(user.username)}</h3><span class="tag">${esc(user.role)}</span></div>${button('Sign out','logout','','','logout')}</div><div class="divider"></div><h3>Minecraft Launcher</h3><p>Connect MML with this account and manage signed-in launchers.</p>${button('Launcher connections','launcher-connections','','','link')}<div class="divider"></div><h3>Username</h3><form data-form="username">${field('Username','username',user.username,'text','Capitalization is preserved; sign-in ignores case.','required minlength="3" maxlength="32"')}${field('Current password','current','','password','','required')}<button class="button primary">Save username</button></form><div class="divider"></div><h3>Profile picture</h3>${button('Upload picture','image-upload','avatar','','upload')}<form data-form="profile">${field('Minecraft username','minecraft_name',user.username,'text','Pull the face and hat layer from this Minecraft skin.','required pattern="[A-Za-z0-9_]{1,16}"')}<button class="button">Use Minecraft face</button></form><div class="divider"></div><h3>Password</h3><form data-form="password">${field('Current password','current','','password','','required')}${field('New password','password','','password','Saving signs out your existing sessions.','required')}<div class="formactions"><button class="button primary">Save password</button></div></form>`);
 }
@@ -619,7 +621,7 @@ async function refresh() {
  }catch(e){console.debug('Refresh:',e.message);}finally{polling=false;}
 }
 async function init(){
- try{const setup=await api('/setup');if(setup.required){showAuth(true);return;}const me=await api('/me');user=me.user;csrf=me.csrf;appearance=await api('/appearance');refreshFavicon();await navigate('dashboard');void activityPoll();}catch(e){showAuth(false);}
+ try{const setup=await api('/setup');sharedAccounts=setup.account_service||null;if(setup.required){showAuth(true);return;}const me=await api('/me');user=me.user;csrf=me.csrf;appearance=await api('/appearance');refreshFavicon();await navigate('dashboard');void activityPoll();}catch(e){showAuth(false);}
 }
 setInterval(refresh,5000);
 setInterval(activityPoll,2000);

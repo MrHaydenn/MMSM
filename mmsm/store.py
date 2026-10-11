@@ -121,8 +121,15 @@ class Store:
                             (json.dumps(GITHUB_UPDATE_FEED), json.dumps('')))
             self.db.execute("INSERT INTO settings(key,value) VALUES('_github_feed_migrated','true')")
         self.db.commit()
+        for table in ('sessions', 'launcher_connections'):
+            # launcher_connections is created by initialize below.
+            if table == 'sessions' and 'identity_version' not in {r[1] for r in self.db.execute('PRAGMA table_info(sessions)')}:
+                self.db.execute('ALTER TABLE sessions ADD COLUMN identity_version INTEGER')
         from .launcher import initialize
         initialize(self)
+        if 'identity_version' not in {r[1] for r in self.db.execute('PRAGMA table_info(launcher_connections)')}:
+            self.db.execute('ALTER TABLE launcher_connections ADD COLUMN identity_version INTEGER')
+            self.db.commit()
         with contextlib.suppress(OSError):
             os.chmod(self.root, 0o700)
             os.chmod(self.root / 'mmsm.sqlite3', 0o600)
@@ -164,6 +171,8 @@ class Store:
 
     def add_user(self, username, password, role, first=False):
         import re
+        from .central_identity import config
+        require(not config(self), 'Create identities in the account service, then grant local access using the linking tool', 409)
         require(isinstance(username, str) and re.fullmatch(r'[a-zA-Z0-9_.-]{3,32}', username), 'Username must be 3–32 letters, numbers, dots, underscores or hyphens')
         require(role in ('owner', 'admin', 'operator', 'viewer'), 'Invalid role')
         hashed = password_hash(password)
@@ -183,16 +192,29 @@ class Store:
         rows = self.rows('SELECT * FROM users WHERE username=?', (username,))
         # Same expensive KDF for unknown usernames to reduce enumeration timing.
         candidate = rows[0]['password'] if rows else self.dummy_password
-        require(password_matches(password, candidate) and rows, 'Invalid username or password', 401)
+        from .central_identity import config, authenticate, provision
+        identity = authenticate(self, username, password) if config(self) else None
+        if identity:
+            provision(self, identity)
+            rows = self.rows('SELECT * FROM users WHERE id=?', (identity['id'],))
+            require(rows, 'This account has no access to this MMSM instance', 403)
+            self.execute('UPDATE users SET username=? WHERE id=?', (identity['username'], identity['id']))
+            rows[0]['username'] = identity['username']
+        else:
+            require(password_matches(password, candidate) and rows, 'Invalid username or password', 401)
         user = {k: rows[0][k] for k in ('id', 'username', 'role')}
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         self.execute('INSERT INTO sessions(token,user_id,csrf,expires) VALUES(?,?,?,?)', (hashlib.sha256(token.encode()).hexdigest(), user['id'], csrf, time.time() + 86400))
+        if identity:
+            self.execute('UPDATE sessions SET identity_version=? WHERE token=?', (identity['version'], hashlib.sha256(token.encode()).hexdigest()))
         return user, token, csrf
 
     def session(self, token):
-        rows = self.rows('SELECT users.id, username, role, csrf, server_ids, avatar, permissions FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>?',
+        rows = self.rows('SELECT users.id, username, role, csrf, server_ids, avatar, permissions, identity_version FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>?',
                          (hashlib.sha256(token.encode()).hexdigest(), time.time()))
         require(rows, 'Please sign in', 401)
+        from .central_identity import status
+        status(self, rows[0]['id'], rows[0]['identity_version'])
         return rows[0]
 
     def prune_downloads(self,max_records=10000,max_bytes=16*1024**2,max_days=90):

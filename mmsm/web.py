@@ -250,7 +250,9 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(file.read_bytes(), content_type=mimetypes.guess_type(file.name)[0] + '; charset=utf-8')
             return
         if path == '/api/setup' and method == 'GET':
-            self.reply({'required': not bool(store.rows('SELECT 1 FROM users LIMIT 1'))})
+            from .central_identity import config
+            cfg = config(store)
+            self.reply({'required': not cfg and not bool(store.rows('SELECT 1 FROM users LIMIT 1')), 'account_service': cfg['url'] if cfg else None})
             return
         if path == '/api/setup' and method == 'POST':
             self.rate_limit()
@@ -264,6 +266,8 @@ class Handler(BaseHTTPRequestHandler):
             user, token, csrf = store.login(data.get('username', ''), data.get('password', ''))
             self.reply({'user': user, 'csrf': csrf}, headers={'Set-Cookie': self.session_cookie_header(token)})
             return
+        from .central_identity import exchange
+        if exchange(self): return
         from .launcher import public_route, account_route
         if public_route(self): return
         self.authenticate()
@@ -286,6 +290,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/logout' and method == 'POST':
             store.execute('DELETE FROM sessions WHERE token=?', (hashlib.sha256(token.encode()).hexdigest(),))
             self.reply({'ok': True}, headers={'Set-Cookie': self.session_cookie_header(expire=True,name=self.session_cookie)}); return
+        from .central_identity import config as identity_config
+        if path in ('/api/username', '/api/password') and method == 'POST':
+            require(not identity_config(store), 'Manage your username and password at the shared account service', 409)
         if path == '/api/username' and method == 'POST':
             import re
             name = data.get('username', '')
@@ -440,6 +447,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 role = data.get('role', rows[0]['role'])
                 require(role in ('admin', 'operator', 'viewer'), 'Invalid role')
+                require(not (identity_config(store) and data.get('password')), 'Reset passwords at the shared account service', 409)
                 hashed = password_hash(data['password']) if data.get('password') else rows[0]['password']
                 selected = validate_scope(store,data) if 'server_ids' in data else rows[0]['server_ids']
                 from .permissions import validate_policy

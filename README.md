@@ -73,3 +73,30 @@ Wrapper Settings groups General, Archived servers and owner-only Accounts. The O
 Sign into MMSM in your browser, click your profile, and open **Launcher connections**. Generate a one-use token, then paste the instance URL and token into MML. Tokens expire after ten minutes; generating a new token replaces the previous unused token for your account.
 
 The launcher signs into the same account and keeps its existing server permissions. Connections expire after 30 days and can be revoked individually from your profile. Revocation, password changes, and account deletion invalidate linked launcher sessions. Only your normal browser session can generate new pairing tokens; a connected launcher cannot mint additional credentials. Pairing and connection secrets are stored hashed on the server. MML encrypts its saved connection credential using Windows credential protection.
+
+## Haydenn shared accounts
+
+Install the Experimental update containing this integration, then **stop MMSM**.
+In a terminal in the MMSM folder, run:
+
+```powershell
+py -3.12 -m mmsm.configure_accounts
+```
+
+For a custom data folder, append `--data "D:/MMSM-data"`.
+The command connects to https://accounts.mrhaydenn.us and prompts privately for
+`clients.mmsm` from the account server's config.json and your shared administrator
+credentials. Enable the **mmsm** application membership on that account first.
+It verifies both credentials and client key, backs up mmsm.sqlite3,
+removes existing local accounts/sessions and assigns the chosen shared identity
+as this MMSM instance's owner. Worlds, server settings and backups are retained.
+Keep data/account-service.json and the database backup private.
+
+Restart with start.bat and use your shared username/password. New shared users
+with mmsm membership can sign in, but start as viewers with **no server access**.
+The owner grants roles, server scopes and permissions under Settings → Accounts.
+Create identities and change credentials at the account service. Disabling an
+identity, changing its password or removing mmsm membership revokes its MMSM
+sessions. If the account service is offline, authentication fails closed.
+MML's shared account connection uses the same identity with MMSM's local access.
+No central administrator automatically gains ownership of another MMSM instance.

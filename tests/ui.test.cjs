@@ -459,3 +459,12 @@ test('settings groups owner accounts and archive while wake history stays collap
  const settings=h.run("settingsPage({default_memory_mb:4096,unm_token_saved:true})");assert.match(settings,/Integration token saved/);assert.doesNotMatch(settings,/Managed SSH tunnel/);
  h.run('appearance.logo=true');assert.match(h.run('settingsPage({default_memory_mb:4096})'),/Restore default image/);
 });
+
+
+test('shared account settings link credentials to the identity service and omit password edits',async()=>{
+ const h=harness();h.run("sharedAccounts='https://accounts.mrhaydenn.us';closePopover=()=>{};modal=(title,html)=>{document.querySelector('#modal').innerHTML=html;};");
+ h.run('accountSettingsModal()');const html=h.elements.get('#modal').innerHTML;
+ assert.match(html,/https:\/\/accounts.mrhaydenn.us/);assert.doesNotMatch(html,/data-form="password"/);
+ h.run("api=async()=>[];");await h.run("accountModal({id:'member',username:'Member',role:'viewer',server_ids:[]})");
+ assert.doesNotMatch(h.elements.get('#modal').innerHTML,/name="password"/);
+});

@@ -33,22 +33,32 @@ def revoke_user(store, uid):
 def issue_session(store, uid, connection_id, expires):
     user = store.rows('SELECT id,username,role,avatar,server_ids,permissions FROM users WHERE id=?',(uid,))
     require(user,'Connection is no longer available. Generate a new token in MMSM.',401)
+    from .central_identity import status
+    connection=store.rows('SELECT identity_version FROM launcher_connections WHERE id=?',(connection_id,))
+    require(connection, 'Connection revoked',401)
+    version=connection[0]['identity_version']
+    status(store,uid,version)
     token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     with store.lock, store.db:
         require(store.db.execute('SELECT 1 FROM launcher_connections WHERE id=? AND user_id=? AND expires>?',(connection_id,uid,time.time())).fetchone(),'Launcher connection expired or revoked',401)
         store.db.execute('DELETE FROM sessions WHERE launcher_id=?',(connection_id,))
         store.db.execute('INSERT INTO sessions(token,user_id,csrf,expires,launcher_id) VALUES(?,?,?,?,?)',
                          (digest(token),uid,csrf,min(expires,time.time()+86400),connection_id))
+    store.execute('UPDATE sessions SET identity_version=? WHERE token=?',(version,digest(token)))
     return user_public(user[0]),token
 
 def public_route(h):
     store=h.server.manager.store;path=h.url.path;method=h.command
     if path=='/api/launcher/info' and method=='GET':
-        h.reply({'product':'MMSM','protocol':1,'instance_id':store.settings()['_launcher_instance_id']});return True
+        from .central_identity import config
+        cfg=config(store)
+        h.reply({'product':'MMSM','protocol':1,'instance_id':store.settings()['_launcher_instance_id'], 'identity': {'url':cfg['url'],'client_id':cfg['client_id']} if cfg else None});return True
     if path not in ('/api/launcher/connect','/api/launcher/session','/api/launcher/disconnect') or method!='POST':return False
     h.rate_limit()
     now=time.time()
     if path=='/api/launcher/connect':
+        from .central_identity import config
+        require(not config(store), 'Sign in with your shared account in MML',409)
         pairing=h.data.get('token','')
         require(isinstance(pairing,str) and re.fullmatch(r'mml_pair_[A-Za-z0-9_-]{43}',pairing),'Invalid or expired connection token',401)
         access='mml_access_'+secrets.token_urlsafe(32);cid=secrets.token_hex(12);expires=now+ACCESS_LIFETIME
@@ -57,7 +67,7 @@ def public_route(h):
             require(row,'Invalid or expired connection token',401)
             require(store.db.execute('SELECT 1 FROM users WHERE id=?',(row['user_id'],)).fetchone(),'Account is no longer available',401)
             store.db.execute('DELETE FROM launcher_pairings WHERE token=?',(digest(pairing),))
-            store.db.execute('INSERT INTO launcher_connections VALUES(?,?,?,?,?,?,?)',(cid,digest(access),row['user_id'],'MML on Windows',now,expires,now))
+            store.db.execute('INSERT INTO launcher_connections(id,token,user_id,label,created,expires,last_used) VALUES(?,?,?,?,?,?,?)',(cid,digest(access),row['user_id'],'MML on Windows',now,expires,now))
         user,cookie=issue_session(store,row['user_id'],cid,expires)
         store.audit(user['username'],'Connected MML launcher '+cid)
         h.reply({'user':user,'access_token':access,'expires':expires,'connection_id':cid,'instance_id':store.settings()['_launcher_instance_id']},headers={'Set-Cookie':h.session_cookie_header(cookie)})
@@ -83,6 +93,8 @@ def account_route(h):
         h.reply(store.rows('SELECT id,label,created,expires,last_used FROM launcher_connections WHERE user_id=? AND expires>? ORDER BY created DESC',(uid,now)));return True
     if path=='/api/launcher/pairings' and method=='POST':
         h.rate_limit()
+        from .central_identity import config
+        require(not config(store), 'Sign in with your shared account in MML instead of creating a pairing token',409)
         require(not store.rows('SELECT launcher_id FROM sessions WHERE token=? AND launcher_id IS NOT NULL',(digest(h.session_token),)), 'Generate connection tokens from your browser account, not a connected launcher',403)
         token='mml_pair_'+secrets.token_urlsafe(32)
         with store.lock,store.db:

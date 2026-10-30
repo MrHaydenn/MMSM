@@ -476,3 +476,15 @@ test('guided shared account setup is available from sign-in without a client key
  assert.match(html,/name="owner_password"/);assert.match(html,/name="confirm"/);assert.doesNotMatch(html,/name="key"/);
  h.run('sharedAccounts="https://accounts.mrhaydenn.us";showAuth(false)');assert.doesNotMatch(h.elements.get('#app').innerHTML,/data-action="connect-accounts"/);
 });
+
+
+test('JVM editor loads effective options and synchronizes RAM in both directions',()=>{
+ const h=harness();h.context.sample=sample;const html=h.run('jvmEditor({...sample,jvm_arguments:"-Xms512M -Xmx6144M -XX:+UseG1GC"})');assert.match(html,/-Xmx6144M/);assert.match(html,/Startup JVM arguments/);
+ h.run(`editor={value:'-Xms2G -Xmx4G -XX:+UseG1GC "-Dexample=hello world"'};memory={value:4};feedback={};form={querySelector:s=>s.includes('jvm_args')?editor:s.includes('memory_gb')?memory:feedback};memory.name='memory_gb';memory.closest=()=>form;editor.name='jvm_args';editor.closest=()=>form;`);
+ h.run("editor.value='-Xms2G -Xmx8G -XX:+UseG1GC';syncJvmFields(editor)");assert.equal(h.run('memory.value'),8);
+ h.run("memory.value=1;syncJvmFields(memory)");assert.equal(h.run('editor.value'),'-Xmx1024M -Xms1024M -XX:+UseG1GC');
+ assert.deepEqual(Array.from(h.run('parseJvmArgs(\'-Xmx2G "-Dexample=hello world"\')')),['-Xmx2G','-Dexample=hello world']);
+ h.run(`values=['-Dfoo=hello world',"-Dquote=a'b",'-Dpath=C:\\temp\\folder'];`);
+ assert.deepEqual(Array.from(h.run('parseJvmArgs(values.map(quoteJvmArg).join(" "))')),Array.from(h.run('values')));
+ h.run("editor.value='-Xmxinvalid';syncJvmFields(editor)");assert.match(h.run('feedback.textContent'),/heap sizes/);
+});

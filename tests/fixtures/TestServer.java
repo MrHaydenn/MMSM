@@ -20,6 +20,7 @@ public class TestServer {
     }
     public static void main(String[] args) throws Exception {
         if(java.util.Arrays.asList(args).contains("--crash-on-start")) { System.out.println("Fixture startup failure"); System.exit(7); }
+        if(System.getProperty("mmsm.fixture") != null) System.out.println("Fixture JVM options: " + System.getProperty("mmsm.fixture") + " " + java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments());
         Properties p = new Properties();
         try(InputStream in=Files.newInputStream(Path.of("server.properties"))) { p.load(in); }
         ServerSocket listener = new ServerSocket(Integer.parseInt(p.getProperty("server-port")), 50, InetAddress.getByName("127.0.0.1"));

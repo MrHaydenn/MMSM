@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shlex
 import shutil
 import socket
 import subprocess
@@ -17,6 +18,7 @@ from .store import Problem, require, confined, atomic_write
 from .providers import Providers, MODRINTH, safe_unzip
 from .network import Proxy, status
 from .metrics import Sampler
+from .jvm import effective as effective_jvm, normalize as normalize_jvm
 
 LOADERS = ('vanilla', 'fabric', 'forge', 'neoforge', 'paper')
 PROTECTED_PROPERTIES = {'server-port', 'server-ip', 'enable-query', 'enable-rcon', 'enable-status'}
@@ -95,7 +97,7 @@ class Manager(Features):
     def public(self, s):
         from .domains import plan
         address = plan(self.store.settings(), s) if s.get('public_address', {}).get('label') else {}
-        return {**s, **self.state(s['id']), 'port_shared': sum(x['port'] == s['port'] for x in self.store.servers()) > 1, 'public_hostname': address.get('hostname'), 'metrics': self.latest['servers'].get(s['id'], {}), 'sleep_info': self.sleep_info(s), 'icon': (self.folder(s['id']) / 'server-icon.png').is_file()}
+        return {**s, **self.state(s['id']), 'port_shared': sum(x['port'] == s['port'] for x in self.store.servers()) > 1, 'public_hostname': address.get('hostname'), 'metrics': self.latest['servers'].get(s['id'], {}), 'jvm_arguments': shlex.join(effective_jvm(s)), 'sleep_info': self.sleep_info(s), 'icon': (self.folder(s['id']) / 'server-icon.png').is_file()}
 
     def sleep_info(self, server):
         state = self.state(server['id'])
@@ -366,7 +368,7 @@ class Manager(Features):
             self.ensure_proxy(s, claim=True)
             self.write_properties(s)
             launch = s['launch']
-            args = [launch['java'], '-Xms512M', f'-Xmx{s["memory_mb"]}M', *launch['args']]
+            args = [launch['java'], *effective_jvm(s), *launch['args']]
             self.set_state(sid, status='starting', error=None, detail=None, started=time.time(), idle_since=None, players=None, idle_token=None)
             self.logs[sid] = collections.deque(maxlen=2000)
             try:
@@ -578,6 +580,8 @@ class Manager(Features):
             s = self.idle(sid)
             for key in ('name', 'sleep', 'wake_mode', 'autostart', 'idle_minutes', 'memory_mb'):
                 if key in data: s[key] = data[key]
+            options,memory,initial=normalize_jvm(data.get('jvm_args',s.get('jvm_args',[])),s['memory_mb'],explicit_memory='memory_mb' in data,initial_mb=s.get('initial_memory_mb',512))
+            s.update(jvm_args=options,memory_mb=memory,initial_memory_mb=initial)
             require(isinstance(s['name'], str) and 1 <= len(s['name'].strip()) <= 64, 'Invalid name')
             require(isinstance(s['sleep'], bool), 'Sleep must be true or false')
             require(s.get('wake_mode','join') in ('ping','join'),'Wake mode must be ping or join')

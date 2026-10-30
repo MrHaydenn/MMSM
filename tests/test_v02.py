@@ -179,6 +179,19 @@ class ExplicitJVMControlTests(Base):
             time.sleep(.05)
         self.fail('Fixture JVM did not start')
 
+    def test_custom_jvm_options_reach_real_java_with_one_heap_pair(self):
+        s=self.launch();sid=s['id'];self.manager.stop(sid)
+        self.manager.configure(sid,{'memory_mb':768,'jvm_args':'-Xms128M -Xmx768M -XX:+UseG1GC "-Dmmsm.fixture=hello world"'})
+        self.manager.start(sid)
+        for _ in range(100):
+            text='\n'.join(self.manager.logs[sid])
+            if 'Fixture JVM options:' in text:break
+            time.sleep(.03)
+        self.assertIn('hello world',text)
+        self.assertEqual(text.count('-Xmx768M'),1);self.assertEqual(text.count('-Xms128M'),1)
+        self.assertIn('-XX:+UseG1GC',text)
+        self.manager.stop(sid)
+
     def test_sleep_now_saves_without_waiting_for_idle_timer(self):
         s=self.launch()
         self.assertTrue(self.manager.sleep_now(s['id'])['sleeping'])

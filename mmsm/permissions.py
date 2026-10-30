@@ -97,7 +97,7 @@ def public_server(h,value):
     result['permissions']=flags;result['owned']=value.get('created_by')==h.user['id']
     if not flags['mods']:result['mods']=[];result.pop('modpack',None)
     if not flags['settings']:
-        result.pop('jvm_args',None);result.pop('wake_history',None)
+        result.pop('jvm_args',None);result.pop('jvm_arguments',None);result.pop('initial_memory_mb',None);result.pop('wake_history',None)
     if not flags['backups']:
         for key in ('backup_rules','schedules','backup_result','last_backup'):result.pop(key,None)
     return result

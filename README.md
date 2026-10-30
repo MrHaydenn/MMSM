@@ -98,3 +98,12 @@ identity, changing its password or removing mmsm membership revokes its MMSM
 sessions. If the account service is offline, authentication fails closed.
 MML's shared account connection uses the same identity with MMSM's local access.
 No central administrator automatically gains ownership of another MMSM instance.
+
+
+### Startup JVM arguments
+
+Open a server's **Settings → Startup JVM arguments** to see and edit its effective JVM options, including `-Xms` and `-Xmx`. The loader/JAR command is shown separately and stays managed by MMSM. Stop the server before saving; saved options apply on its next start and survive manager restarts and runtime updates.
+
+The RAM field and `-Xmx` update each other as you type. Reducing RAM also lowers `-Xms` if necessary. MMSM stores custom options separately from heap sizes and emits exactly one `-Xms` and one `-Xmx` at startup. Conflicting RAM values submitted through the API are rejected. If the JVM editor is omitted from an API request, existing custom options are retained.
+
+Example: `-Xms512M -Xmx4G -XX:+UseG1GC "-Dexample=value with spaces"`. Quote values containing spaces or Windows paths (single quotes preserve backslashes). Argument-file, classpath/JAR and alternate heap-size overrides belong to the managed runtime and are rejected in the custom editor. JVM option compatibility still depends on the installed Java version; invalid JVM options will appear in the crash/console logs. Only accounts with the server Settings permission can view or change these options. JVM settings remain local when folders/runtime versions are synced.
